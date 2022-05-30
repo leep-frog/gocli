@@ -34,7 +34,7 @@ func (gc *gocli) Node() *command.Node {
 				}
 
 				covIdx := len(res) - 1
-				for ; covIdx > 0 && strings.TrimSpace(res[covIdx]) == ""; covIdx-- {
+				for ; covIdx > 0 && (strings.TrimSpace(res[covIdx]) == "" || res[covIdx][:4] == "FAIL"); covIdx-- {
 				}
 				covLine := res[covIdx]
 				m := coverageRegex.FindStringSubmatch(covLine)
