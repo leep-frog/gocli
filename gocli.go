@@ -52,7 +52,7 @@ func (gc *gocli) Node() *command.Node {
 					return o.Annotate(err, "failed to parse coverage value")
 				}
 
-				o.Stdoutf(`Coverage is %2.2f\%`, f)
+				o.Stdoutf(`Coverage is %3.1f%%`, f)
 				return nil
 			}),
 		),
