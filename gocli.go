@@ -2,6 +2,7 @@ package gocli
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/leep-frog/command"
 	"github.com/leep-frog/command/sourcerer"
@@ -27,12 +28,15 @@ func (gc *gocli) Node() *command.Node {
 		command.SerialNodes(
 			pathArgs,
 			command.ExecuteErrNode(func(o command.Output, d *command.Data) error {
-				res, err := command.NewBashCommand[[]string]("", []string{"go test . -coverprofile=$(mktemp)"}).Run(o)
+				res, err := command.NewBashCommand[[]string]("", []string{"go test . -coverprofile=$(mktemp)"}, command.ForwardStdout[[]string]()).Run(o)
 				if err != nil {
 					return o.Annotate(err, "failed to run go test command")
 				}
 
-				covLine := res[len(res)-1]
+				covIdx := len(res) - 1
+				for ; covIdx > 0 && strings.TrimSpace(res[covIdx]) == ""; covIdx-- {
+				}
+				covLine := res[covIdx]
 				m := coverageRegex.FindStringSubmatch(covLine)
 				if len(m) == 0 {
 					return o.Stderrf("faield to parse coverage info from line %q", covLine)
