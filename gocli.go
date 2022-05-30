@@ -4,7 +4,12 @@ import (
 	"regexp"
 
 	"github.com/leep-frog/command"
+	"github.com/leep-frog/command/sourcerer"
 )
+
+func CLI() sourcerer.CLI {
+	return &gocli{}
+}
 
 type gocli struct{}
 
