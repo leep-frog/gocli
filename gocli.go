@@ -51,7 +51,7 @@ func (gc *goCLI) Node() *command.Node {
 				res, err := command.NewBashCommand("", []string{fmt.Sprintf("go test %s -coverprofile=$(mktemp)", strings.Join(pathArgs.Get(d), " "))}, command.ForwardStdout[[]string]()).Run(o)
 				if err != nil {
 					// Failed to build or test failed so just return
-					return o.Err(err)
+					return err
 				}
 
 				// Error to return
