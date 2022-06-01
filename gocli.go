@@ -79,7 +79,6 @@ func (gc *goCLI) Node() *command.Node {
 						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s", m[1], percentFormat(f), percentFormat(mc))
 					}
 				}
-				fmt.Println("returning error:", retErr)
 				return retErr
 			}),
 		),
