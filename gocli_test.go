@@ -19,10 +19,8 @@ func TestExecute(t *testing.T) {
 				RunResponses: []*command.FakeRun{{
 					Err: fmt.Errorf("bad news bears"),
 				}},
-				WantStderr: []string{
-					"failed to execute bash command: bad news bears",
-				},
-				WantErr: fmt.Errorf("failed to execute bash command: bad news bears"),
+				WantStderr: "failed to execute bash command: bad news bears\n",
+				WantErr:    fmt.Errorf("failed to execute bash command: bad news bears"),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -42,13 +40,9 @@ func TestExecute(t *testing.T) {
 						`some random line`,
 					},
 				}},
-				WantStdout: []string{
-					`some random line`,
-				},
-				WantStderr: []string{
-					`failed to parse coverage from line "some random line"`,
-				},
-				WantErr: fmt.Errorf(`failed to parse coverage from line "some random line"`),
+				WantStdout: "some random line",
+				WantStderr: "failed to parse coverage from line \"some random line\"\n",
+				WantErr:    fmt.Errorf(`failed to parse coverage from line "some random line"`),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -68,9 +62,7 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
 					},
 				}},
-				WantStdout: []string{
-					`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
-				},
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -93,11 +85,11 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/some/package3      1.234s  coverage: 98.7% of statements`,
 					},
 				}},
-				WantStdout: []string{strings.Join([]string{
+				WantStdout: strings.Join([]string{
 					`ok      github.com/some/package1      1.234s  coverage: 98.7% of statements`,
 					`ok      github.com/some/package2      1.234s  coverage: 98.7% of statements`,
 					`ok      github.com/some/package3      1.234s  coverage: 98.7% of statements`,
-				}, "\n")},
+				}, "\n"),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -119,9 +111,7 @@ func TestExecute(t *testing.T) {
 						``,
 					},
 				}},
-				WantStdout: []string{
-					"ok      github.com/some/package      1.234s  coverage: 98.7% of statements\n\n",
-				},
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements\n\n",
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -142,9 +132,7 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/some/package      1.234s  coverage: 87.6% of statements`,
 					},
 				}},
-				WantStdout: []string{
-					"ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
-				},
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -165,13 +153,9 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/some/package      1.234s  coverage: 87.6% of statements`,
 					},
 				}},
-				WantStdout: []string{
-					"ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
-				},
-				WantStderr: []string{
-					`Coverage of package "github.com/some/package" (87.6%) must be at least 87.8%`,
-				},
-				WantErr: fmt.Errorf(`Coverage of package "github.com/some/package" (87.6%%) must be at least 87.8%%`),
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
+				WantStderr: "Coverage of package \"github.com/some/package\" (87.6%) must be at least 87.8%\n",
+				WantErr:    fmt.Errorf(`Coverage of package "github.com/some/package" (87.6%%) must be at least 87.8%%`),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -198,7 +182,7 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
 					},
 				}},
-				WantStdout: []string{strings.Join([]string{
+				WantStdout: strings.Join([]string{
 					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
 					`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
 					`?       github.com/package/three        [no test files]`,
@@ -206,7 +190,7 @@ func TestExecute(t *testing.T) {
 					`ok      github.com/package/five      123.4s  coverage: 83.6% of statements`,
 					`?       github.com/package/six        [no test files]`,
 					`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-				}, "\n")},
+				}, "\n"),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -233,7 +217,7 @@ func TestExecute(t *testing.T) {
 						`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
 					},
 				}},
-				WantStdout: []string{strings.Join([]string{
+				WantStdout: strings.Join([]string{
 					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
 					`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
 					`?       github.com/package/three        [no test files]`,
@@ -241,11 +225,9 @@ func TestExecute(t *testing.T) {
 					`ok      github.com/package/five      123.4s  coverage: 78.6% of statements`,
 					`?       github.com/package/six        [no test files]`,
 					`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-				}, "\n")},
-				WantStderr: []string{
-					`Coverage of package "github.com/package/five" (78.6%) must be at least 80.0%`,
-				},
-				WantErr: fmt.Errorf(`Coverage of package "github.com/package/five" (78.6%%) must be at least 80.0%%`),
+				}, "\n"),
+				WantStderr: "Coverage of package \"github.com/package/five\" (78.6%) must be at least 80.0%\n",
+				WantErr:    fmt.Errorf(`Coverage of package "github.com/package/five" (78.6%%) must be at least 80.0%%`),
 				WantRunContents: [][]string{{
 					"set -e",
 					"set -o pipefail",
@@ -260,11 +242,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if verbose and min coverage flags provided",
 			etc: &command.ExecuteTestCase{
-				Args: []string{"-m", "87.8", "-v"},
-				WantStderr: []string{
-					"Can't run verbose output with coverage checks",
-				},
-				WantErr: fmt.Errorf("Can't run verbose output with coverage checks"),
+				Args:       []string{"-m", "87.8", "-v"},
+				WantStderr: "Can't run verbose output with coverage checks\n",
+				WantErr:    fmt.Errorf("Can't run verbose output with coverage checks"),
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 87.8,

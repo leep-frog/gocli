@@ -21,10 +21,11 @@ func (gc *goCLI) Setup() []string { return nil }
 func (gc *goCLI) Name() string    { return "gt" }
 
 var (
-	pathArgs      = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompletor[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
 	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements$`)
 	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]$`)
 
+	// Args and flags
+	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompletor[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
 	verboseFlag     = command.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
 	minCoverageFlag = command.NewFlag[float64]("MIN_COVERAGE", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
 )
@@ -45,13 +46,13 @@ func (gc *goCLI) Node() *command.Node {
 				// Error if verbose and coverage check
 				mc := minCoverageFlag.Get(d)
 				if verboseFlag.Get(d) && mc != 0 {
-					return o.Stderr("Can't run verbose output with coverage checks")
+					return o.Stderrln("Can't run verbose output with coverage checks")
 				}
 
 				res, err := command.NewBashCommand("", []string{fmt.Sprintf("go test %s -coverprofile=$(mktemp)", strings.Join(pathArgs.Get(d), " "))}, command.ForwardStdout[[]string]()).Run(o)
 				if err != nil {
 					// Failed to build or test failed so just return
-					return err
+					return o.Err(err)
 				}
 
 				// Error to return
@@ -67,7 +68,7 @@ func (gc *goCLI) Node() *command.Node {
 
 					m := coverageRegex.FindStringSubmatch(coverage)
 					if len(m) == 0 {
-						return o.Stderrf("failed to parse coverage from line %q", coverage)
+						return o.Stderrf("failed to parse coverage from line %q\n", coverage)
 					}
 
 					f, err := strconv.ParseFloat(m[2], 64)
@@ -76,7 +77,7 @@ func (gc *goCLI) Node() *command.Node {
 					}
 
 					if f < mc {
-						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s", m[1], percentFormat(f), percentFormat(mc))
+						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", m[1], percentFormat(f), percentFormat(mc))
 					}
 				}
 				return retErr
