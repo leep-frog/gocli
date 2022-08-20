@@ -25,7 +25,7 @@ var (
 	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]$`)
 
 	// Args and flags
-	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompletor[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
+	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
 	verboseFlag     = command.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
 	minCoverageFlag = command.NewFlag[float64]("MIN_COVERAGE", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
 )
