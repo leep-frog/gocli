@@ -49,7 +49,7 @@ func (gc *goCLI) Node() *command.Node {
 					return o.Stderrln("Can't run verbose output with coverage checks")
 				}
 
-				res, err := command.NewBashCommand("", []string{fmt.Sprintf("go test %s -coverprofile=$(mktemp)", strings.Join(pathArgs.Get(d), " "))}, command.ForwardStdout[[]string]()).Run(o)
+				res, err := command.NewBashCommand("", []string{fmt.Sprintf("go test %s -coverprofile=$(mktemp)", strings.Join(pathArgs.Get(d), " "))}, command.ForwardStdout[[]string]()).Run(o, d)
 				if err != nil {
 					// Failed to build or test failed so just return
 					return o.Err(err)
