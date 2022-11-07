@@ -248,8 +248,31 @@ func TestExecute(t *testing.T) {
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 87.8,
-					verboseFlag.Name():     true,
+					verboseFlag.Name():     " -v",
 				}},
+			},
+		},
+		{
+			name: "Runs with verbose flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-v"},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					verboseFlag.Name():     " -v",
+				}},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
+						``,
+					},
+				}},
+				WantRunContents: [][]string{{
+					"set -e",
+					"set -o pipefail",
+					"go test . -v -coverprofile=$(mktemp)",
+				}},
+				WantStdout: "ok      github.com/package/one      1.234s  coverage: 87.6% of statements\n",
 			},
 		},
 		/* Useful for commenting out tests. */
