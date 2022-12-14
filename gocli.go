@@ -27,7 +27,8 @@ var (
 	// Args and flags
 	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
 	verboseFlag     = command.BoolValueFlag("verbose", 'v', "Whether or not to test with verbose output", " -v")
-	minCoverageFlag = command.Flag[float64]("MIN_COVERAGE", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
+	minCoverageFlag = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
+	timeoutFlag     = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
 )
 
 func percentFormat(f float64) string {
@@ -39,6 +40,7 @@ func (gc *goCLI) Node() *command.Node {
 		command.FlagNode(
 			minCoverageFlag,
 			verboseFlag,
+			timeoutFlag,
 		),
 		pathArgs,
 		&command.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
@@ -48,8 +50,13 @@ func (gc *goCLI) Node() *command.Node {
 				return o.Stderrln("Can't run verbose output with coverage checks")
 			}
 
+			var timeout string
+			if d.Has(timeoutFlag.Name()) {
+				timeout = fmt.Sprintf("-timeout %ds ", timeoutFlag.Get(d))
+			}
+
 			bc := &command.BashCommand[[]string]{
-				Contents:      []string{fmt.Sprintf("go test %s%s -coverprofile=$(mktemp)", strings.Join(pathArgs.Get(d), " "), verboseFlag.Get(d))},
+				Contents:      []string{fmt.Sprintf("go test %s%s%s -coverprofile=$(mktemp)", timeout, strings.Join(pathArgs.Get(d), " "), verboseFlag.Get(d))},
 				ForwardStdout: true,
 			}
 			res, err := bc.Run(o, d)

@@ -75,6 +75,50 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
+			name: "Runs default test coverage with timeout flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"--timeout", "15"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
+					},
+				}},
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
+				WantRunContents: [][]string{{
+					"set -e",
+					"set -o pipefail",
+					"go test -timeout 15s . -coverprofile=$(mktemp)",
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					timeoutFlag.Name():     15,
+				}},
+			},
+		},
+		{
+			name: "Runs default test coverage with timeout short flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-t", "500"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
+					},
+				}},
+				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
+				WantRunContents: [][]string{{
+					"set -e",
+					"set -o pipefail",
+					"go test -timeout 500s . -coverprofile=$(mktemp)",
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					timeoutFlag.Name():     500,
+				}},
+			},
+		},
+		{
 			name: "Runs default test coverage with path arg provided",
 			etc: &command.ExecuteTestCase{
 				Args: []string{"./path1", "./path/2", "../p3"},
