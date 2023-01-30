@@ -35,7 +35,7 @@ func percentFormat(f float64) string {
 	return fmt.Sprintf("%3.1f%%", f)
 }
 
-func (gc *goCLI) Node() *command.Node {
+func (gc *goCLI) Node() command.Node {
 	return command.SerialNodes(
 		command.FlagNode(
 			minCoverageFlag,
