@@ -78,6 +78,9 @@ func (gc *goCLI) Node() command.Node {
 
 				m := coverageRegex.FindStringSubmatch(coverage)
 				if len(m) == 0 {
+					if d.Has(verboseFlag.Name()) {
+						continue
+					}
 					return o.Stderrf("failed to parse coverage from line %q\n", coverage)
 				}
 

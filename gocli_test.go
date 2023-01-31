@@ -319,6 +319,42 @@ func TestExecute(t *testing.T) {
 				WantStdout: "ok      github.com/package/one      1.234s  coverage: 87.6% of statements\n",
 			},
 		},
+		{
+			name: "Runs with verbose flag and extra output",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-v"},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					verboseFlag.Name():     " -v",
+				}},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						`=== RUN   TestQMKExecution/load_bindings_in_basic_mode#01`,
+						`--- PASS: TestQMKExecution (0.00s)`,
+						`    --- PASS: TestQMKExecution/qmk_toggle_fails_if_env_variable_is_unset (0.00s)`,
+						`and some lines that`,
+						` are printed!`,
+						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
+						``,
+					},
+				}},
+				WantRunContents: [][]string{{
+					"set -e",
+					"set -o pipefail",
+					"go test . -v -coverprofile=$(mktemp)",
+				}},
+				WantStdout: strings.Join([]string{
+					`=== RUN   TestQMKExecution/load_bindings_in_basic_mode#01`,
+					`--- PASS: TestQMKExecution (0.00s)`,
+					`    --- PASS: TestQMKExecution/qmk_toggle_fails_if_env_variable_is_unset (0.00s)`,
+					`and some lines that`,
+					` are printed!`,
+					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
+					``,
+				}, "\n"),
+			},
+		},
 		/* Useful for commenting out tests. */
 	} {
 		t.Run(test.name, func(t *testing.T) {
