@@ -46,12 +46,13 @@ var (
 			if path == "./..." {
 				maxDepth = ""
 			}
+			cmd := fmt.Sprintf(findTestFunctionCommand, path, maxDepth)
 			bc := &command.BashCommand[[]string]{
-				Contents: []string{fmt.Sprintf(findTestFunctionCommand, path, maxDepth)},
+				Contents: []string{cmd},
 			}
 			lines, err := bc.Run(command.NewIgnoreAllOutput(), data)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%q : %v", cmd, err)
 			}
 			for _, line := range lines {
 				m := findTestRegex.FindStringSubmatch(line)
