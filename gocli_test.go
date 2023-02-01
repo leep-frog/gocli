@@ -364,6 +364,160 @@ func TestExecute(t *testing.T) {
 	}
 }
 
+func TestAutocomplete(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		ctc  *command.CompleteTestCase
+	}{
+		{
+			name: "completes directories",
+			ctc: &command.CompleteTestCase{
+				Want: []string{
+					".git/",
+					"testpkg/",
+					" ",
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():        []string{""},
+						minCoverageFlag.Name(): 0.0,
+					},
+				},
+			},
+		},
+		{
+			name: "completes all test function names",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f ",
+				Want: []string{
+					"Other",
+					"That",
+					"This",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						funcFilterFlag.Name(): []string{""},
+					},
+				},
+			},
+		},
+		{
+			name: "completes partial test function names",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f O",
+				Want: []string{
+					"Other",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						funcFilterFlag.Name(): []string{"O"},
+					},
+				},
+			},
+		},
+		{
+			name: "completes distinct test function names",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f That T",
+				Want: []string{
+					"This",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						funcFilterFlag.Name(): []string{"That", "T"},
+					},
+				},
+			},
+		},
+		{
+			name: "checks all sub files if global path",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd './...' and -f ",
+				Want: []string{
+					"Other",
+					"That",
+					"This",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, "./...", ""),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						funcFilterFlag.Name(): []string{""},
+					},
+				},
+			},
+		},
+		/* Useful for commenting out tests. */
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			test.ctc.Node = (&goCLI{}).Node()
+			command.CompleteTest(t, test.ctc)
+		})
+	}
+}
+
 func TestMetadata(t *testing.T) {
 	gc := &goCLI{}
 	if gc.Changed() {

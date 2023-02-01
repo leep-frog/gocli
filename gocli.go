@@ -20,15 +20,52 @@ func (gc *goCLI) Changed() bool   { return false }
 func (gc *goCLI) Setup() []string { return nil }
 func (gc *goCLI) Name() string    { return "gt" }
 
+const (
+	findTestFunctionCommand = `find %s %s -iname '*_test.go' | xargs cat | grep -E '^func\s+Test.*\*testing.T'`
+	defaultMaxDepth         = "-maxDepth 1"
+)
+
 var (
 	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements$`)
 	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]$`)
+
+	findTestRegex = regexp.MustCompile(`^func\s+Test([a-zA-Z0-9_]*)\b`)
 
 	// Args and flags
 	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
 	verboseFlag     = command.BoolValueFlag("verbose", 'v', "Whether or not to test with verbose output", " -v")
 	minCoverageFlag = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
 	timeoutFlag     = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
+	funcFilterFlag  = command.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, command.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
+		var suggestions []string
+		fmt.Println("CHECKING")
+		for _, path := range pathArgs.GetOrDefault(data, []string{"."}) {
+			fmt.Println("PATH", path)
+			maxDepth := defaultMaxDepth
+			if path == "./..." {
+				maxDepth = ""
+			}
+			bc := &command.BashCommand[[]string]{
+				Contents: []string{fmt.Sprintf(findTestFunctionCommand, path, maxDepth)},
+			}
+			lines, err := bc.Run(command.NewIgnoreAllOutput(), data)
+			if err != nil {
+				return nil, err
+			}
+			for _, line := range lines {
+				m := findTestRegex.FindStringSubmatch(line)
+				if len(m) == 0 {
+					return nil, fmt.Errorf("Returned line did not match expected format: [%q]", line)
+				}
+				suggestions = append(suggestions, m[1])
+			}
+		}
+		return &command.Completion{
+			Suggestions:     suggestions,
+			Distinct:        true,
+			CaseInsensitive: true,
+		}, nil
+	}))
 )
 
 func percentFormat(f float64) string {
@@ -37,10 +74,11 @@ func percentFormat(f float64) string {
 
 func (gc *goCLI) Node() command.Node {
 	return command.SerialNodes(
-		command.FlagNode(
+		command.FlagProcessor(
 			minCoverageFlag,
 			verboseFlag,
 			timeoutFlag,
+			funcFilterFlag,
 		),
 		pathArgs,
 		&command.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
