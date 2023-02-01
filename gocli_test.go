@@ -398,7 +398,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{
@@ -429,7 +429,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{
@@ -460,7 +460,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{
@@ -488,7 +488,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{
@@ -519,7 +519,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{
@@ -589,7 +589,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "path1", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, "path1", defaultMaxdepth),
 					},
 					{
 						"set -e",
@@ -599,7 +599,7 @@ func TestAutocomplete(t *testing.T) {
 					{
 						"set -e",
 						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "path2", defaultMaxDepth),
+						fmt.Sprintf(findTestFunctionCommand, "path2", defaultMaxdepth),
 					},
 				},
 				RunResponses: []*command.FakeRun{

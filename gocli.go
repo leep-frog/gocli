@@ -23,7 +23,7 @@ func (gc *goCLI) Name() string    { return "gt" }
 
 const (
 	findTestFunctionCommand = `find %s %s -iname '*_test.go' | xargs cat | grep -E '^func\s+Test.*\*testing.T'`
-	defaultMaxDepth         = "-maxDepth 1"
+	defaultMaxdepth         = "-maxdepth 1"
 	funcFilterFlagName      = "func-filter"
 )
 
@@ -42,17 +42,17 @@ var (
 	funcFilterFlag = command.ListFlag[string](funcFilterFlagName, 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter[[]string](command.SerialNodes(pathArgs), func(data *command.Data) (*command.Completion, error) {
 		suggestions := map[string]bool{}
 		for _, path := range pathArgs.GetOrDefault(data, []string{"."}) {
-			maxDepth := defaultMaxDepth
+			maxdepth := defaultMaxdepth
 			if path == "./..." {
-				maxDepth = ""
+				maxdepth = ""
 			}
-			cmd := fmt.Sprintf(findTestFunctionCommand, path, maxDepth)
+			cmd := fmt.Sprintf(findTestFunctionCommand, path, maxdepth)
 			bc := &command.BashCommand[[]string]{
 				Contents: []string{cmd},
 			}
 			lines, err := bc.Run(command.NewIgnoreAllOutput(), data)
 			if err != nil {
-				return nil, fmt.Errorf("%s : %v", cmd, err)
+				return nil, err
 			}
 			for _, line := range lines {
 				m := findTestRegex.FindStringSubmatch(line)
