@@ -355,6 +355,33 @@ func TestExecute(t *testing.T) {
 				}, "\n"),
 			},
 		},
+		// funcFilterFlag tests
+		{
+			name: "Adds func filter arguments",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-f", "Un", "Deux"},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					funcFilterFlagName:     []string{"Un", "Deux"},
+				}},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
+						``,
+					},
+				}},
+				WantRunContents: [][]string{{
+					"set -e",
+					"set -o pipefail",
+					`go test . -run "(Un|Deux)"  -coverprofile=$(mktemp)`,
+				}},
+				WantStdout: strings.Join([]string{
+					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
+					``,
+				}, "\n"),
+			},
+		},
 		/* Useful for commenting out tests. */
 	} {
 		t.Run(test.name, func(t *testing.T) {

@@ -100,8 +100,14 @@ func (gc *goCLI) Node() command.Node {
 				timeout = fmt.Sprintf("-timeout %ds ", timeoutFlag.Get(d))
 			}
 
+			funcFilter := ""
+			if d.Has(funcFilterFlag.Name()) {
+				parens := fmt.Sprintf("(%s)", strings.Join(funcFilterFlag.Get(d), "|"))
+				funcFilter = fmt.Sprintf(" -run %q ", parens)
+			}
+
 			bc := &command.BashCommand[[]string]{
-				Contents:      []string{fmt.Sprintf("go test %s%s%s -coverprofile=$(mktemp)", timeout, strings.Join(pathArgs.Get(d), " "), verboseFlag.Get(d))},
+				Contents:      []string{fmt.Sprintf("go test %s%s%s%s -coverprofile=$(mktemp)", timeout, strings.Join(pathArgs.Get(d), " "), verboseFlag.Get(d), funcFilter)},
 				ForwardStdout: true,
 			}
 			res, err := bc.Run(o, d)
