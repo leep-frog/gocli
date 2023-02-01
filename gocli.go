@@ -52,7 +52,7 @@ var (
 			}
 			lines, err := bc.Run(command.NewIgnoreAllOutput(), data)
 			if err != nil {
-				return nil, fmt.Errorf("%q : %v", cmd, err)
+				return nil, fmt.Errorf("%s : %v", cmd, err)
 			}
 			for _, line := range lines {
 				m := findTestRegex.FindStringSubmatch(line)
