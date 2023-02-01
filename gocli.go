@@ -57,7 +57,7 @@ var (
 			for _, line := range lines {
 				m := findTestRegex.FindStringSubmatch(line)
 				if len(m) == 0 {
-					return nil, fmt.Errorf("Returned line did not match expected format: [%q]", line)
+					return nil, fmt.Errorf("Returned line did not match expected format: [%q] [%v] %d", line, lines, len(lines))
 				}
 				suggestions[m[1]] = true
 			}
