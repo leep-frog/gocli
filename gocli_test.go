@@ -412,6 +412,7 @@ func TestAutocomplete(t *testing.T) {
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
 						funcFilterFlag.Name(): []string{""},
 					},
 				},
@@ -442,6 +443,7 @@ func TestAutocomplete(t *testing.T) {
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
 						funcFilterFlag.Name(): []string{"O"},
 					},
 				},
@@ -472,6 +474,68 @@ func TestAutocomplete(t *testing.T) {
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
+						funcFilterFlag.Name(): []string{"That", "T"},
+					},
+				},
+			},
+		},
+		{
+			name: "handles bash error",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f That T",
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+						Err:    fmt.Errorf("Oops"),
+						Stderr: []string{"stderr oops"},
+					},
+				},
+				WantErr: fmt.Errorf("failed to execute bash command: Oops"),
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
+						funcFilterFlag.Name(): []string{"That", "T"},
+					},
+				},
+			},
+		},
+		{
+			name: "handles invalid regex error",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f That T",
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"what is this?!?",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+				},
+				WantErr: fmt.Errorf(`Returned line did not match expected format: ["what is this?!?"]`),
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
 						funcFilterFlag.Name(): []string{"That", "T"},
 					},
 				},
@@ -480,7 +544,7 @@ func TestAutocomplete(t *testing.T) {
 		{
 			name: "checks all sub files if global path",
 			ctc: &command.CompleteTestCase{
-				Args: "cmd './...' and -f ",
+				Args: "cmd './...' -f ",
 				Want: []string{
 					"Other",
 					"That",
@@ -504,6 +568,63 @@ func TestAutocomplete(t *testing.T) {
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"./..."},
+						funcFilterFlag.Name(): []string{""},
+					},
+				},
+			},
+		},
+		{
+			name: "checks multiple paths",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd path1 './...' path2 -f ",
+				Want: []string{
+					"Finally",
+					"Other",
+					"That",
+					"ThatAgain",
+					"This",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, "path1", defaultMaxDepth),
+					},
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, "./...", ""),
+					},
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, "path2", defaultMaxDepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"func \t TestOther(t *testing.T",
+						},
+					},
+					{
+						Stdout: []string{
+							"func TestThis(t *testing.T",
+							"func\tTestThatAgain(t *testing.T",
+						},
+					},
+					{
+						Stdout: []string{
+							"func TestFinally(t *testing.T",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"path1", "./...", "path2"},
 						funcFilterFlag.Name(): []string{""},
 					},
 				},

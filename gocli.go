@@ -8,6 +8,7 @@ import (
 
 	"github.com/leep-frog/command"
 	"github.com/leep-frog/command/sourcerer"
+	"golang.org/x/exp/maps"
 )
 
 func CLI() sourcerer.CLI {
@@ -23,6 +24,7 @@ func (gc *goCLI) Name() string    { return "gt" }
 const (
 	findTestFunctionCommand = `find %s %s -iname '*_test.go' | xargs cat | grep -E '^func\s+Test.*\*testing.T'`
 	defaultMaxDepth         = "-maxDepth 1"
+	funcFilterFlagName      = "func-filter"
 )
 
 var (
@@ -36,11 +38,10 @@ var (
 	verboseFlag     = command.BoolValueFlag("verbose", 'v', "Whether or not to test with verbose output", " -v")
 	minCoverageFlag = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
 	timeoutFlag     = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
-	funcFilterFlag  = command.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, command.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
-		var suggestions []string
-		fmt.Println("CHECKING")
+
+	funcFilterFlag = command.ListFlag[string](funcFilterFlagName, 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter[[]string](command.SerialNodes(pathArgs), func(data *command.Data) (*command.Completion, error) {
+		suggestions := map[string]bool{}
 		for _, path := range pathArgs.GetOrDefault(data, []string{"."}) {
-			fmt.Println("PATH", path)
 			maxDepth := defaultMaxDepth
 			if path == "./..." {
 				maxDepth = ""
@@ -57,14 +58,16 @@ var (
 				if len(m) == 0 {
 					return nil, fmt.Errorf("Returned line did not match expected format: [%q]", line)
 				}
-				suggestions = append(suggestions, m[1])
+				suggestions[m[1]] = true
 			}
 		}
-		return &command.Completion{
-			Suggestions:     suggestions,
+		// Can't use funcFilterFlag.Get(data) because of cyclical dependency
+		ffs := data.StringList(funcFilterFlagName)
+		return command.RunArgumentCompletion(&command.Completion{
+			Suggestions:     maps.Keys(suggestions),
 			Distinct:        true,
 			CaseInsensitive: true,
-		}, nil
+		}, ffs[len(ffs)-1], ffs, data)
 	}))
 )
 
