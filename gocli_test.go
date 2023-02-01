@@ -481,6 +481,42 @@ func TestAutocomplete(t *testing.T) {
 			},
 		},
 		{
+			name: "ignores empty lines (usually just at the end of output)",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd -f ",
+				Want: []string{
+					"Other",
+					"That",
+					"This",
+				},
+				WantRunContents: [][]string{
+					{
+						"set -e",
+						"set -o pipefail",
+						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
+					},
+				},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							"",
+							"func TestThis(t *testing.T",
+							"func\tTestThat(t *testing.T",
+							"",
+							"func \t TestOther(t *testing.T",
+							"",
+						},
+					},
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"."},
+						funcFilterFlag.Name(): []string{""},
+					},
+				},
+			},
+		},
+		{
 			name: "handles bash error",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd -f That T",
