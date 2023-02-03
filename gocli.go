@@ -24,7 +24,6 @@ func (gc *goCLI) Name() string    { return "gt" }
 const (
 	findTestFunctionCommand = `find %s %s -iname '*_test.go' | xargs cat | grep -E '^func\s+Test.*\*testing.T'`
 	defaultMaxdepth         = "-maxdepth 1"
-	funcFilterFlagName      = "func-filter"
 )
 
 var (
@@ -39,7 +38,7 @@ var (
 	minCoverageFlag = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
 	timeoutFlag     = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
 
-	funcFilterFlag = command.ListFlag[string](funcFilterFlagName, 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter[[]string](command.SerialNodes(pathArgs), func(data *command.Data) (*command.Completion, error) {
+	funcFilterFlag = command.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter(command.SerialNodes(pathArgs), command.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
 		suggestions := map[string]bool{}
 		for _, path := range pathArgs.GetOrDefault(data, []string{"."}) {
 			maxdepth := defaultMaxdepth
@@ -65,14 +64,12 @@ var (
 				suggestions[m[1]] = true
 			}
 		}
-		// Can't use funcFilterFlag.Get(data) because of cyclical dependency
-		ffs := data.StringList(funcFilterFlagName)
-		return command.RunArgumentCompletion(&command.Completion{
+		return &command.Completion{
 			Suggestions:     maps.Keys(suggestions),
 			Distinct:        true,
 			CaseInsensitive: true,
-		}, ffs[len(ffs)-1], ffs, data)
-	}))
+		}, nil
+	})))
 )
 
 func percentFormat(f float64) string {

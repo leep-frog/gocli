@@ -363,7 +363,7 @@ func TestExecute(t *testing.T) {
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 0.0,
-					funcFilterFlagName:     []string{"Un", "Deux"},
+					funcFilterFlag.Name():  []string{"Un", "Deux"},
 				}},
 				RunResponses: []*command.FakeRun{{
 					Stdout: []string{
