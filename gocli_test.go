@@ -14,17 +14,19 @@ func TestExecute(t *testing.T) {
 		etc  *command.ExecuteTestCase
 	}{
 		{
-			name: "Fails if bash command fails",
+			name: "Fails if shell command fails",
 			etc: &command.ExecuteTestCase{
 				RunResponses: []*command.FakeRun{{
 					Err: fmt.Errorf("bad news bears"),
 				}},
-				WantStderr: "failed to execute bash command: bad news bears\n",
-				WantErr:    fmt.Errorf("failed to execute bash command: bad news bears"),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantStderr: "failed to execute shell command: bad news bears\n",
+				WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -43,10 +45,12 @@ func TestExecute(t *testing.T) {
 				WantStdout: "some random line",
 				WantStderr: "failed to parse coverage from line \"some random line\"\n",
 				WantErr:    fmt.Errorf(`failed to parse coverage from line "some random line"`),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -63,10 +67,12 @@ func TestExecute(t *testing.T) {
 					},
 				}},
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -84,10 +90,14 @@ func TestExecute(t *testing.T) {
 					},
 				}},
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test -timeout 15s . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						"-timeout",
+						"15s",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -106,10 +116,14 @@ func TestExecute(t *testing.T) {
 					},
 				}},
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test -timeout 500s . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						"-timeout",
+						"500s",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -134,10 +148,14 @@ func TestExecute(t *testing.T) {
 					`ok      github.com/some/package2      1.234s  coverage: 98.7% of statements`,
 					`ok      github.com/some/package3      1.234s  coverage: 98.7% of statements`,
 				}, "\n"),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test ./path1 ./path/2 ../p3 -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						"./path1",
+						"./path/2",
+						"../p3",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"./path1", "./path/2", "../p3"},
@@ -156,10 +174,12 @@ func TestExecute(t *testing.T) {
 					},
 				}},
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements\n\n",
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -177,10 +197,12 @@ func TestExecute(t *testing.T) {
 					},
 				}},
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -200,10 +222,12 @@ func TestExecute(t *testing.T) {
 				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
 				WantStderr: "Coverage of package \"github.com/some/package\" (87.6%) must be at least 87.8%\n",
 				WantErr:    fmt.Errorf(`Coverage of package "github.com/some/package" (87.6%%) must be at least 87.8%%`),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -235,10 +259,12 @@ func TestExecute(t *testing.T) {
 					`?       github.com/package/six        [no test files]`,
 					`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
 				}, "\n"),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -272,10 +298,12 @@ func TestExecute(t *testing.T) {
 				}, "\n"),
 				WantStderr: "Coverage of package \"github.com/package/five\" (78.6%) must be at least 80.0%\n",
 				WantErr:    fmt.Errorf(`Coverage of package "github.com/package/five" (78.6%%) must be at least 80.0%%`),
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+					},
 				}},
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
@@ -292,7 +320,7 @@ func TestExecute(t *testing.T) {
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 87.8,
-					verboseFlag.Name():     " -v",
+					verboseFlag.Name():     true,
 				}},
 			},
 		},
@@ -303,7 +331,7 @@ func TestExecute(t *testing.T) {
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 0.0,
-					verboseFlag.Name():     " -v",
+					verboseFlag.Name():     true,
 				}},
 				RunResponses: []*command.FakeRun{{
 					Stdout: []string{
@@ -311,10 +339,13 @@ func TestExecute(t *testing.T) {
 						``,
 					},
 				}},
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -v -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-v",
+					},
 				}},
 				WantStdout: "ok      github.com/package/one      1.234s  coverage: 87.6% of statements\n",
 			},
@@ -326,7 +357,7 @@ func TestExecute(t *testing.T) {
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 0.0,
-					verboseFlag.Name():     " -v",
+					verboseFlag.Name():     true,
 				}},
 				RunResponses: []*command.FakeRun{{
 					Stdout: []string{
@@ -339,10 +370,13 @@ func TestExecute(t *testing.T) {
 						``,
 					},
 				}},
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					"go test . -v -coverprofile=$(mktemp)",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-v",
+					},
 				}},
 				WantStdout: strings.Join([]string{
 					`=== RUN   TestQMKExecution/load_bindings_in_basic_mode#01`,
@@ -371,10 +405,14 @@ func TestExecute(t *testing.T) {
 						``,
 					},
 				}},
-				WantRunContents: [][]string{{
-					"set -e",
-					"set -o pipefail",
-					`go test . -run "(Un|Deux)"  -coverprofile=$(mktemp)`,
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-run",
+						`(Un|Deux)`,
+					},
 				}},
 				WantStdout: strings.Join([]string{
 					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
@@ -413,29 +451,13 @@ func TestAutocomplete(t *testing.T) {
 			},
 		},
 		{
-			name: "completes all test function names",
+			name: "completes test function names in current directory",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd -f ",
 				Want: []string{
-					"Other",
-					"That",
-					"This",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-					},
+					"Autocomplete",
+					"Execute",
+					"Metadata",
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -446,188 +468,16 @@ func TestAutocomplete(t *testing.T) {
 			},
 		},
 		{
-			name: "completes partial test function names",
-			ctc: &command.CompleteTestCase{
-				Args: "cmd -f O",
-				Want: []string{
-					"Other",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-					},
-				},
-				WantData: &command.Data{
-					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"."},
-						funcFilterFlag.Name(): []string{"O"},
-					},
-				},
-			},
-		},
-		{
-			name: "completes distinct test function names",
-			ctc: &command.CompleteTestCase{
-				Args: "cmd -f That T",
-				Want: []string{
-					"This",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-					},
-				},
-				WantData: &command.Data{
-					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"."},
-						funcFilterFlag.Name(): []string{"That", "T"},
-					},
-				},
-			},
-		},
-		{
-			name: "ignores empty lines (usually just at the end of output)",
-			ctc: &command.CompleteTestCase{
-				Args: "cmd -f ",
-				Want: []string{
-					"Other",
-					"That",
-					"This",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"",
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"",
-							"func \t TestOther(t *testing.T",
-							"",
-						},
-					},
-				},
-				WantData: &command.Data{
-					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"."},
-						funcFilterFlag.Name(): []string{""},
-					},
-				},
-			},
-		},
-		{
-			name: "handles bash error",
-			ctc: &command.CompleteTestCase{
-				Args: "cmd -f That T",
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-						Err:    fmt.Errorf("Oops"),
-						Stderr: []string{"stderr oops"},
-					},
-				},
-				WantErr: fmt.Errorf("failed to execute bash command: Oops"),
-				WantData: &command.Data{
-					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"."},
-						funcFilterFlag.Name(): []string{"That", "T"},
-					},
-				},
-			},
-		},
-		{
-			name: "handles invalid regex error",
-			ctc: &command.CompleteTestCase{
-				Args: "cmd -f That T",
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, ".", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"what is this?!?",
-							"func \t TestOther(t *testing.T",
-						},
-					},
-				},
-				WantErr: fmt.Errorf(`Returned line did not match expected format: ["what is this?!?"]`),
-				WantData: &command.Data{
-					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"."},
-						funcFilterFlag.Name(): []string{"That", "T"},
-					},
-				},
-			},
-		},
-		{
-			name: "checks all sub files if global path",
+			name: "completes test function names in all sub directories",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd './...' -f ",
 				Want: []string{
+					"Autocomplete",
+					"Execute",
+					"Metadata",
 					"Other",
 					"That",
 					"This",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "./...", ""),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -638,57 +488,31 @@ func TestAutocomplete(t *testing.T) {
 			},
 		},
 		{
-			name: "checks multiple paths",
+			name: "completes partial test function names",
 			ctc: &command.CompleteTestCase{
-				Args: "cmd path1 './...' path2 -f ",
+				Args: "cmd -f A",
 				Want: []string{
-					"Finally",
-					"Other",
-					"That",
-					"ThatAgain",
-					"This",
-				},
-				WantRunContents: [][]string{
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "path1", defaultMaxdepth),
-					},
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "./...", ""),
-					},
-					{
-						"set -e",
-						"set -o pipefail",
-						fmt.Sprintf(findTestFunctionCommand, "path2", defaultMaxdepth),
-					},
-				},
-				RunResponses: []*command.FakeRun{
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThat(t *testing.T",
-							"func \t TestOther(t *testing.T",
-						},
-					},
-					{
-						Stdout: []string{
-							"func TestThis(t *testing.T",
-							"func\tTestThatAgain(t *testing.T",
-						},
-					},
-					{
-						Stdout: []string{
-							"func TestFinally(t *testing.T",
-						},
-					},
+					"Autocomplete",
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
-						pathArgs.Name():       []string{"path1", "./...", "path2"},
-						funcFilterFlag.Name(): []string{""},
+						pathArgs.Name():       []string{"."},
+						funcFilterFlag.Name(): []string{"A"},
+					},
+				},
+			},
+		},
+		{
+			name: "completes distinct test function names",
+			ctc: &command.CompleteTestCase{
+				Args: "cmd ./... -f That T",
+				Want: []string{
+					"This",
+				},
+				WantData: &command.Data{
+					Values: map[string]interface{}{
+						pathArgs.Name():       []string{"./..."},
+						funcFilterFlag.Name(): []string{"That", "T"},
 					},
 				},
 			},
