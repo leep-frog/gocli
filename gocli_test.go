@@ -18,6 +18,18 @@ func noTestEvent(pkg string) *goTestEvent {
 	}
 }
 
+func marshalEvents(t *testing.T, events ...*goTestEvent) string {
+	var r []string
+	for _, e := range events {
+		b, err := json.Marshal(e)
+		if err != nil {
+			t.Fatalf("Failed to marshal event to json: %v", err)
+		}
+		r = append(r, string(b))
+	}
+	return strings.Join(r, "\n")
+}
+
 func coverageTestEvent(pkg string, coverage float64) *goTestEvent {
 	return &goTestEvent{
 		Action:  "output",
@@ -86,9 +98,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if invalid json",
 			etc: &command.ExecuteTestCase{
-				WantErr: fmt.Errorf("failed to parse go event (} bleh {\n): invalid character '}' looking for beginning of value"),
+				WantErr: fmt.Errorf("failed to parse go event (} bleh {): invalid character '}' looking for beginning of value"),
 				WantStderr: strings.Join([]string{
-					"failed to parse go event (} bleh {\n): invalid character '}' looking for beginning of value\n",
+					"failed to parse go event (} bleh {): invalid character '}' looking for beginning of value\n",
 				}, "\n"),
 				RunResponses: []*command.FakeRun{{
 					Stdout: []string{"} bleh {"},
@@ -702,6 +714,49 @@ func TestExecute(t *testing.T) {
 				WantStdout: strings.Join([]string{
 					coverageEventOutput("p1", 75),
 					"? p2 [no test files]",
+					coverageEventOutput("p3", 44),
+					"",
+				}, "\n"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"./..."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Handles multiple events in the same input",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"./..."},
+				RunResponses: []*command.FakeRun{
+					{
+						Stdout: []string{
+							marshalEvents(t,
+								&goTestEvent{Action: "success", Package: "p1"},
+								&goTestEvent{Action: "output", Output: "huzzah\n"},
+								&goTestEvent{Action: "success", Package: "p2"},
+								&goTestEvent{Action: "success", Package: "p3"},
+								coverageTestEvent("p1", 75),
+								noTestEvent("p2"),
+								&goTestEvent{Action: "output", Output: "hurray\n"},
+								coverageTestEvent("p3", 44),
+							),
+						},
+					},
+				},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						"./...",
+						"-json",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantStdout: strings.Join([]string{
+					"huzzah",
+					coverageEventOutput("p1", 75),
+					"? p2 [no test files]",
+					"hurray",
 					coverageEventOutput("p3", 44),
 					"",
 				}, "\n"),

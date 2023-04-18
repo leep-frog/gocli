@@ -145,13 +145,20 @@ type goTestEvent struct {
 	Elapsed int
 }
 
-func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *command.Data, line []byte) error {
+func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *command.Data, bLines []byte) error {
 	if eh.err != nil {
 		return nil
 	}
 
-	if err := eh.streamFunc(output, data, line); err != nil {
-		eh.err = err
+	for _, line := range strings.Split(string(bLines), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if err := eh.streamFunc(output, data, []byte(line)); err != nil {
+			eh.err = err
+			// Stop processing additional lines if error
+			return nil
+		}
 	}
 	return nil
 }
