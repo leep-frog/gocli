@@ -2,6 +2,7 @@ package gocli
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/leep-frog/command"
 	"github.com/leep-frog/command/sourcerer"
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 func CLI() sourcerer.CLI {
@@ -27,7 +29,7 @@ func (gc *goCLI) Name() string    { return "gt" }
 
 var (
 	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements$`)
-	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]$`)
+	noTestRegex   = regexp.MustCompile("^\\?.*\\[no test files\\]\n?$")
 
 	findTestRegex = regexp.MustCompile(`^func\s+Test([a-zA-Z0-9_]*)\b.*\*testing\.[A-Z]\b`)
 	testFileRegex = regexp.MustCompile(`.*_test.go$`)
@@ -93,6 +95,104 @@ func percentFormat(f float64) string {
 	return fmt.Sprintf("%3.1f%%", f)
 }
 
+const (
+	noTestFiles   = -1.0
+	unsetCoverage = -2.0
+)
+
+type coverageInfo struct {
+	line     string
+	coverage float64
+}
+
+type goTestEventHandler struct {
+	packageResults map[string]bool
+	coverage       map[string]*coverageInfo
+	err            error
+}
+
+func (eh *goTestEventHandler) setPackageResult(p, action string, res bool) error {
+	if r, ok := eh.packageResults[p]; ok {
+		return fmt.Errorf("Duplicate package results: %v, %s", r, action)
+	}
+	eh.packageResults[p] = res
+	return nil
+}
+
+type goTestEvent struct {
+	Time    string
+	Action  string
+	Package string
+	Output  string
+	// Specific to individual test cases
+	Test    string
+	Elapsed int
+}
+
+func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *command.Data, line []byte) error {
+	if eh.err != nil {
+		return nil
+	}
+
+	if err := eh.streamFunc(output, data, line); err != nil {
+		eh.err = err
+	}
+	return nil
+}
+
+func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Data, line []byte) error {
+	e := &goTestEvent{}
+	if err := json.Unmarshal(line, e); err != nil {
+		return fmt.Errorf("failed to parse go event (%s): %v", line, err)
+	}
+
+	// Package event
+	if e.Test == "" {
+		switch e.Action {
+		case "success", "failure":
+			if err := eh.setPackageResult(e.Package, e.Action, e.Action == "success"); err != nil {
+				return err
+			}
+		case "output":
+			output.Stdout(e.Output)
+			var setCoverage *coverageInfo
+			if noTestRegex.MatchString(e.Output) {
+				setCoverage = &coverageInfo{
+					line:     e.Output,
+					coverage: noTestFiles,
+				}
+			} else if m := coverageRegex.FindStringSubmatch(e.Output); len(m) > 0 {
+				f, err := strconv.ParseFloat(m[2], 64)
+				if err != nil {
+					return fmt.Errorf("failed to parse coverage value: %v", err)
+				}
+				setCoverage = &coverageInfo{
+					line:     e.Output,
+					coverage: f,
+				}
+			}
+
+			// Set the coverage
+			if setCoverage != nil {
+				// Check if it's already set
+				if c, ok := eh.coverage[e.Package]; ok {
+					return fmt.Errorf("Duplicate package coverage: %v, %v", c, setCoverage)
+				}
+				eh.coverage[e.Package] = setCoverage
+			}
+		case "skip":
+		default:
+			return fmt.Errorf("Unknown package event action: %q", e.Action)
+		}
+	} else {
+		// Test event
+		if verboseFlag.Get(data) && e.Action == "output" {
+			output.Stdoutf(e.Output)
+		}
+	}
+	return nil
+}
+
 func (gc *goCLI) Node() command.Node {
 	return command.SerialNodes(
 		command.FlagProcessor(
@@ -117,54 +217,55 @@ func (gc *goCLI) Node() command.Node {
 				args = append(args, "-timeout", fmt.Sprintf("%ds", timeoutFlag.Get(d)))
 			}
 			args = append(args, pathArgs.Get(d)...)
+			args = append(args, "-json")
 			if verboseFlag.Get(d) {
 				args = append(args, "-v")
 			}
 			if d.Has(funcFilterFlag.Name()) {
 				parens := fmt.Sprintf("(%s)", strings.Join(funcFilterFlag.Get(d), "|"))
 				args = append(args, "-run", parens)
+			} else if sourcerer.CurrentOS.Name() == "linux" {
+				args = append(args, "-coverprofile=$(mktemp)")
+			} else {
+				args = append(args, "-coverprofile=(New-TemporaryFile)")
 			}
 
 			// Run the command
-			sc := &command.ShellCommand[[]string]{
-				CommandName:   "go",
-				Args:          args,
-				ForwardStdout: true,
+			eh := &goTestEventHandler{
+				packageResults: map[string]bool{},
+				coverage:       map[string]*coverageInfo{},
 			}
-			res, err := sc.Run(o, d)
-			if err != nil {
-				// Failed to build or test failed so just return
+			sc := &command.ShellCommand[[]string]{
+				CommandName:           "go",
+				Args:                  args,
+				OutputStreamProcessor: eh.streamFuncWrapper,
+			}
+			if _, err := sc.Run(o, d); err != nil {
 				return o.Err(err)
+			}
+			if eh.err != nil {
+				return o.Err(eh.err)
 			}
 
 			// Error to return
+			packages := maps.Keys(eh.packageResults)
+			slices.Sort(packages)
 			var retErr error
-			for _, coverage := range res {
-				if coverage == "" {
+			for _, p := range packages {
+				coverage, ok := eh.coverage[p]
+				if !ok {
+					return o.Stderrf("No coverage set for package: %s", p)
+				}
+
+				if coverage.coverage == noTestFiles {
 					continue
 				}
 
-				if noTestRegex.MatchString(coverage) {
-					continue
-				}
-
-				m := coverageRegex.FindStringSubmatch(coverage)
-				if len(m) == 0 {
-					if d.Has(verboseFlag.Name()) {
-						continue
-					}
-					return o.Stderrf("failed to parse coverage from line %q\n", coverage)
-				}
-
-				f, err := strconv.ParseFloat(m[2], 64)
-				if err != nil {
-					return o.Annotate(err, "failed to parse coverage value")
-				}
-
-				if f < mc {
-					retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", m[1], percentFormat(f), percentFormat(mc))
+				if coverage.coverage < mc {
+					retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(coverage.coverage), percentFormat(mc))
 				}
 			}
+
 			return retErr
 		}},
 	)

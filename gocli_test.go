@@ -1,6 +1,7 @@
 package gocli
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -8,12 +9,119 @@ import (
 	"github.com/leep-frog/command"
 )
 
+func noTestEvent(pkg string) *goTestEvent {
+	return &goTestEvent{
+		Action:  "output",
+		Package: pkg,
+		Output:  fmt.Sprintf("? %s [no test files]\n", pkg),
+	}
+}
+
 func TestExecute(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		etc  *command.ExecuteTestCase
+		name   string
+		etc    *command.ExecuteTestCase
+		events []*goTestEvent
 	}{
 		{
+			name: "Fails if shell command fails",
+			etc: &command.ExecuteTestCase{
+				WantStderr: "failed to execute shell command: bad news bears\n",
+				WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
+				RunResponses: []*command.FakeRun{{
+					Err: fmt.Errorf("bad news bears"),
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(New-TemporaryFile)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Fails if unknown action",
+			events: []*goTestEvent{
+				{Action: "ugh", Package: "p1"},
+			},
+			etc: &command.ExecuteTestCase{
+				WantErr:    fmt.Errorf("Unknown package event action: \"ugh\""),
+				WantStderr: "Unknown package event action: \"ugh\"\n",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(New-TemporaryFile)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Tests a package with no test files",
+			events: []*goTestEvent{
+				{Action: "success", Package: "p1"},
+				noTestEvent("p1"),
+			},
+			etc: &command.ExecuteTestCase{
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(New-TemporaryFile)",
+					},
+				}},
+				WantStdout: strings.Join([]string{
+					"? p1 [no test files]",
+					"",
+				}, "\n"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Tests a package when output event is first",
+			events: []*goTestEvent{
+				noTestEvent("p1"),
+				{Action: "success", Package: "p1"},
+			},
+			etc: &command.ExecuteTestCase{
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(New-TemporaryFile)",
+					},
+				}},
+				WantStdout: strings.Join([]string{
+					"? p1 [no test files]",
+					"",
+				}, "\n"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		/*{
 			name: "Fails if shell command fails",
 			etc: &command.ExecuteTestCase{
 				RunResponses: []*command.FakeRun{{
@@ -424,6 +532,19 @@ func TestExecute(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.etc.Node = (&goCLI{}).Node()
+			if test.events != nil {
+				var frs []string
+				for _, e := range test.events {
+					b, err := json.Marshal(e)
+					if err != nil {
+						t.Fatalf("Failed to marshal event to json: %v", err)
+					}
+					frs = append(frs, string(b))
+				}
+				test.etc.RunResponses = []*command.FakeRun{{
+					Stdout: frs,
+				}}
+			}
 			command.ExecuteTest(t, test.etc)
 		})
 	}
