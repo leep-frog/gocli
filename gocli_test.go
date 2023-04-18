@@ -149,7 +149,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Tests a package with no test files",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 			},
 			etc: &command.ExecuteTestCase{
@@ -175,7 +175,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Tests a package with coverage",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				coverageTestEvent("p1", 54.3),
 			},
 			etc: &command.ExecuteTestCase{
@@ -190,6 +190,32 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					coverageEventOutput("p1", 54.3),
+					"",
+				}, "\n"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Fails if package test fails",
+			events: []*goTestEvent{
+				{Action: "fail", Package: "p1"},
+			},
+			etc: &command.ExecuteTestCase{
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantErr: fmt.Errorf("Tests failed for package: p1"),
+				WantStderr: strings.Join([]string{
+					"Tests failed for package: p1",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -216,7 +242,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if no package coverage detected",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
 				WantRunContents: []*command.RunContents{{
@@ -242,7 +268,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if multiple coverage events detected",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 				coverageTestEvent("p1", 1),
 			},
@@ -275,8 +301,8 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if multiple, different package result events detected",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
-				{Action: "failure", Package: "p1"},
+				{Action: "pass", Package: "p1"},
+				{Action: "fail", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
 				WantRunContents: []*command.RunContents{{
@@ -288,9 +314,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: success, failure"),
+				WantErr: fmt.Errorf("Duplicate package results: pass, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: success, failure",
+					"Duplicate package results: pass, fail",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -302,8 +328,8 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if multiple, same package result events detected",
 			events: []*goTestEvent{
-				{Action: "failure", Package: "p1"},
-				{Action: "failure", Package: "p1"},
+				{Action: "fail", Package: "p1"},
+				{Action: "fail", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
 				WantRunContents: []*command.RunContents{{
@@ -315,9 +341,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: failure, failure"),
+				WantErr: fmt.Errorf("Duplicate package results: fail, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: failure, failure",
+					"Duplicate package results: fail, fail",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -329,9 +355,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Ignores later events if error encountered",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				{Action: "output", Package: "p1", Output: "some output\n"},
-				{Action: "failure", Package: "p1"},
+				{Action: "fail", Package: "p1"},
 				{Action: "output", Package: "p1", Output: "some more output\n"},
 				{Action: "output", Package: "p1", Output: "final output\n"},
 			},
@@ -345,9 +371,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: success, failure"),
+				WantErr: fmt.Errorf("Duplicate package results: pass, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: success, failure",
+					"Duplicate package results: pass, fail",
 					"",
 				}, "\n"),
 				WantStdout: strings.Join([]string{
@@ -363,7 +389,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if coverage is below threshold",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				coverageTestEvent("p1", 54.3),
 			},
 			etc: &command.ExecuteTestCase{
@@ -395,7 +421,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Succeeds if coverage is at threshold",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				coverageTestEvent("p1", 54.4),
 			},
 			etc: &command.ExecuteTestCase{
@@ -422,7 +448,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Succeeds if coverage is above threshold",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				coverageTestEvent("p1", 54.5),
 			},
 			etc: &command.ExecuteTestCase{
@@ -450,7 +476,7 @@ func TestExecute(t *testing.T) {
 			name: "Tests a package when output event is first",
 			events: []*goTestEvent{
 				noTestEvent("p1"),
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
 				WantRunContents: []*command.RunContents{{
@@ -475,7 +501,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Includes timeout flag",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 			},
 			etc: &command.ExecuteTestCase{
@@ -505,7 +531,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Includes func-filter flag",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 			},
 			etc: &command.ExecuteTestCase{
@@ -534,7 +560,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Outputs package lines",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
@@ -564,7 +590,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Outputs test lines when verbose flag is provided",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
@@ -599,7 +625,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Verbose and timeout flags",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
@@ -637,7 +663,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Verbose, timeout, and func filter flags",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
+				{Action: "pass", Package: "p1"},
 				coverageTestEvent("p1", 75),
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
@@ -693,9 +719,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Handles multiple packages",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
-				{Action: "success", Package: "p2"},
-				{Action: "success", Package: "p3"},
+				{Action: "pass", Package: "p1"},
+				{Action: "pass", Package: "p2"},
+				{Action: "pass", Package: "p3"},
 				coverageTestEvent("p1", 75),
 				noTestEvent("p2"),
 				coverageTestEvent("p3", 44),
@@ -731,10 +757,10 @@ func TestExecute(t *testing.T) {
 					{
 						Stdout: []string{
 							marshalEvents(t,
-								&goTestEvent{Action: "success", Package: "p1"},
+								&goTestEvent{Action: "pass", Package: "p1"},
 								&goTestEvent{Action: "output", Output: "huzzah\n"},
-								&goTestEvent{Action: "success", Package: "p2"},
-								&goTestEvent{Action: "success", Package: "p3"},
+								&goTestEvent{Action: "pass", Package: "p2"},
+								&goTestEvent{Action: "pass", Package: "p3"},
 								coverageTestEvent("p1", 75),
 								noTestEvent("p2"),
 								&goTestEvent{Action: "output", Output: "hurray\n"},
@@ -769,9 +795,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Outputs errors for multiple packages",
 			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
-				{Action: "success", Package: "p2"},
-				{Action: "success", Package: "p3"},
+				{Action: "pass", Package: "p1"},
+				{Action: "pass", Package: "p2"},
+				{Action: "pass", Package: "p3"},
 				coverageTestEvent("p1", 75),
 				// Missing p2 info
 				coverageTestEvent("p3", 43.2), // Insufficient p3 info

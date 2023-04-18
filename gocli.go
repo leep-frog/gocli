@@ -117,8 +117,8 @@ func (ci *coverageInfo) String() string {
 }
 
 type packageResult struct {
-	status  string
-	success bool
+	status string
+	pass   bool
 }
 
 type goTestEventHandler struct {
@@ -131,7 +131,7 @@ func (eh *goTestEventHandler) setPackageResult(p, action string) error {
 	if r, ok := eh.packageResults[p]; ok {
 		return fmt.Errorf("Duplicate package results: %s, %s", r.status, action)
 	}
-	eh.packageResults[p] = &packageResult{action, action == "success"}
+	eh.packageResults[p] = &packageResult{action, action == "pass"}
 	return nil
 }
 
@@ -172,7 +172,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 	// Package event
 	if e.Test == "" {
 		switch e.Action {
-		case "success", "failure":
+		case "pass", "fail":
 			if err := eh.setPackageResult(e.Package, e.Action); err != nil {
 				return err
 			}
@@ -277,6 +277,11 @@ func (gc *goCLI) Node() command.Node {
 			slices.Sort(packages)
 			var retErr error
 			for _, p := range packages {
+				if !eh.packageResults[p].pass {
+					retErr = o.Stderrf("Tests failed for package: %s\n", p)
+					continue
+				}
+
 				coverage, ok := eh.coverage[p]
 				if !ok {
 					retErr = o.Stderrf("No coverage set for package: %s\n", p)
