@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/leep-frog/command"
+	"github.com/leep-frog/command/sourcerer"
 )
 
 func noTestEvent(pkg string) *goTestEvent {
@@ -17,536 +18,754 @@ func noTestEvent(pkg string) *goTestEvent {
 	}
 }
 
+func coverageTestEvent(pkg string, coverage float64) *goTestEvent {
+	return &goTestEvent{
+		Action:  "output",
+		Package: pkg,
+		Output:  coverageEventOutput(pkg, coverage) + "\n",
+	}
+}
+
+func coverageEventOutput(pkg string, coverage float64) string {
+	return fmt.Sprintf("ok %s coverage: %0.2f%% of statements", pkg, coverage)
+}
+
 func TestExecute(t *testing.T) {
-	for _, test := range []struct {
-		name   string
-		etc    *command.ExecuteTestCase
-		events []*goTestEvent
-	}{
-		{
-			name: "Fails if shell command fails",
-			etc: &command.ExecuteTestCase{
-				WantStderr: "failed to execute shell command: bad news bears\n",
-				WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
-				RunResponses: []*command.FakeRun{{
-					Err: fmt.Errorf("bad news bears"),
-				}},
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-json",
-						"-coverprofile=(New-TemporaryFile)",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+	for _, curOS := range []sourcerer.OS{sourcerer.Linux(), sourcerer.Windows()} {
+		for _, test := range []struct {
+			name   string
+			etc    *command.ExecuteTestCase
+			events []*goTestEvent
+		}{
+			{
+				name: "Fails if shell command fails",
+				etc: &command.ExecuteTestCase{
+					WantStderr: "failed to execute shell command: bad news bears\n",
+					WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
+					RunResponses: []*command.FakeRun{{
+						Err: fmt.Errorf("bad news bears"),
+					}},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Fails if unknown action",
-			events: []*goTestEvent{
-				{Action: "ugh", Package: "p1"},
+			{
+				name: "Fails if unknown action",
+				events: []*goTestEvent{
+					{Action: "ugh", Package: "p1"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantErr:    fmt.Errorf("Unknown package event action: \"ugh\""),
+					WantStderr: "Unknown package event action: \"ugh\"\n",
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-			etc: &command.ExecuteTestCase{
-				WantErr:    fmt.Errorf("Unknown package event action: \"ugh\""),
-				WantStderr: "Unknown package event action: \"ugh\"\n",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-json",
-						"-coverprofile=(New-TemporaryFile)",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Fails if invalid json",
+				etc: &command.ExecuteTestCase{
+					WantErr: fmt.Errorf("failed to parse go event (} bleh {\n): invalid character '}' looking for beginning of value"),
+					WantStderr: strings.Join([]string{
+						"failed to parse go event (} bleh {\n): invalid character '}' looking for beginning of value\n",
+					}, "\n"),
+					RunResponses: []*command.FakeRun{{
+						Stdout: []string{"} bleh {"},
+					}},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Tests a package with no test files",
-			events: []*goTestEvent{
-				{Action: "success", Package: "p1"},
-				noTestEvent("p1"),
+			{
+				name: "Ignores skip action",
+				events: []*goTestEvent{
+					{Action: "skip", Package: "p1"},
+					noTestEvent("p1"),
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-			etc: &command.ExecuteTestCase{
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-json",
-						"-coverprofile=(New-TemporaryFile)",
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					"? p1 [no test files]",
-					"",
-				}, "\n"),
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Tests a package with no test files",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Tests a package when output event is first",
-			events: []*goTestEvent{
-				noTestEvent("p1"),
-				{Action: "success", Package: "p1"},
+			{
+				name: "Tests a package with coverage",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					coverageTestEvent("p1", 54.3),
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 54.3),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-			etc: &command.ExecuteTestCase{
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-json",
-						"-coverprofile=(New-TemporaryFile)",
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					"? p1 [no test files]",
-					"",
-				}, "\n"),
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Fails if no package coverage detected",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf("No coverage set for package: p1"),
+					WantStderr: strings.Join([]string{
+						"No coverage set for package: p1",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		/*{
-			name: "Fails if shell command fails",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
-					Err: fmt.Errorf("bad news bears"),
-				}},
-				WantStderr: "failed to execute shell command: bad news bears\n",
-				WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Fails if multiple coverage events detected",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+					coverageTestEvent("p1", 1),
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf(`Duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00%% of statements"}`),
+					WantStderr: strings.Join([]string{
+						`Duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00% of statements"}`,
+						"",
+					}, "\n"),
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						coverageEventOutput("p1", 1),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Fails if regex doesn't match",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`some random line`,
-					},
-				}},
-				WantStdout: "some random line",
-				WantStderr: "failed to parse coverage from line \"some random line\"\n",
-				WantErr:    fmt.Errorf(`failed to parse coverage from line "some random line"`),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Fails if multiple, different package result events detected",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					{Action: "failure", Package: "p1"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf("Duplicate package results: success, failure"),
+					WantStderr: strings.Join([]string{
+						"Duplicate package results: success, failure",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs default test coverage",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Fails if multiple, same package result events detected",
+				events: []*goTestEvent{
+					{Action: "failure", Package: "p1"},
+					{Action: "failure", Package: "p1"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf("Duplicate package results: failure, failure"),
+					WantStderr: strings.Join([]string{
+						"Duplicate package results: failure, failure",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs default test coverage with timeout flag",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"--timeout", "15"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						"-timeout",
-						"15s",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-					timeoutFlag.Name():     15,
-				}},
+			{
+				name: "Ignores later events if error encountered",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					{Action: "output", Package: "p1", Output: "some output\n"},
+					{Action: "failure", Package: "p1"},
+					{Action: "output", Package: "p1", Output: "some more output\n"},
+					{Action: "output", Package: "p1", Output: "final output\n"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf("Duplicate package results: success, failure"),
+					WantStderr: strings.Join([]string{
+						"Duplicate package results: success, failure",
+						"",
+					}, "\n"),
+					WantStdout: strings.Join([]string{
+						"some output",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs default test coverage with timeout short flag",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-t", "500"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						"-timeout",
-						"500s",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-					timeoutFlag.Name():     500,
-				}},
+			{
+				name: "Fails if coverage is below threshold",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					coverageTestEvent("p1", 54.3),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-m", "54.4"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantErr: fmt.Errorf("Coverage of package \"p1\" (54.3%%) must be at least 54.4%%"),
+					WantStderr: strings.Join([]string{
+						"Coverage of package \"p1\" (54.3%) must be at least 54.4%",
+						"",
+					}, "\n"),
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 54.3),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 54.4,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs default test coverage with path arg provided",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"./path1", "./path/2", "../p3"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package1      1.234s  coverage: 98.7% of statements`,
-						`ok      github.com/some/package2      1.234s  coverage: 98.7% of statements`,
-						`ok      github.com/some/package3      1.234s  coverage: 98.7% of statements`,
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					`ok      github.com/some/package1      1.234s  coverage: 98.7% of statements`,
-					`ok      github.com/some/package2      1.234s  coverage: 98.7% of statements`,
-					`ok      github.com/some/package3      1.234s  coverage: 98.7% of statements`,
-				}, "\n"),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						"./path1",
-						"./path/2",
-						"../p3",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"./path1", "./path/2", "../p3"},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Succeeds if coverage is at threshold",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					coverageTestEvent("p1", 54.4),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-m", "54.4"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 54.4),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 54.4,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs default test coverage if extra newlines",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 98.7% of statements`,
-						``,
-						``,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 98.7% of statements\n\n",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-				}},
+			{
+				name: "Succeeds if coverage is above threshold",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					coverageTestEvent("p1", 54.5),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-m", "54.4"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 54.5),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 54.4,
+					}},
+				},
 			},
-		},
-		{
-			name: "Passes if coverage is high enough",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-m", "87.5"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 87.6% of statements`,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 87.5,
-				}},
+			{
+				name: "Tests a package when output event is first",
+				events: []*goTestEvent{
+					noTestEvent("p1"),
+					{Action: "success", Package: "p1"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Fails if coverage isn't high enough",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-m", "87.8"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/some/package      1.234s  coverage: 87.6% of statements`,
-					},
-				}},
-				WantStdout: "ok      github.com/some/package      1.234s  coverage: 87.6% of statements",
-				WantStderr: "Coverage of package \"github.com/some/package\" (87.6%) must be at least 87.8%\n",
-				WantErr:    fmt.Errorf(`Coverage of package "github.com/some/package" (87.6%%) must be at least 87.8%%`),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 87.8,
-				}},
+			{
+				name: "Includes timeout flag",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-t", "123"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							"-timeout",
+							"123s",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+						timeoutFlag.Name():     123,
+					}},
+				},
 			},
-		},
-		{
-			name: "Passes if coverage is high enough for multiple packages",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-m", "80"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-						`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
-						`?       github.com/package/three        [no test files]`,
-						`?       github.com/package/four        [no test files]`,
-						`ok      github.com/package/five      123.4s  coverage: 83.6% of statements`,
-						`?       github.com/package/six        [no test files]`,
-						`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-					`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
-					`?       github.com/package/three        [no test files]`,
-					`?       github.com/package/four        [no test files]`,
-					`ok      github.com/package/five      123.4s  coverage: 83.6% of statements`,
-					`?       github.com/package/six        [no test files]`,
-					`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-				}, "\n"),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 80.0,
-				}},
+			{
+				name: "Includes func-filter flag",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-f", "SingleFunc", "DoubleFunc"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-run",
+							"(SingleFunc|DoubleFunc)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+						funcFilterFlag.Name():  []string{"SingleFunc", "DoubleFunc"},
+					}},
+				},
 			},
-		},
-		{
-			name: "Fails if coverage isn't high enough for one of multiple packages",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-m", "80"},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-						`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
-						`?       github.com/package/three        [no test files]`,
-						`?       github.com/package/four        [no test files]`,
-						`ok      github.com/package/five      123.4s  coverage: 78.6% of statements`,
-						`?       github.com/package/six        [no test files]`,
-						`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-					`ok      github.com/package/two      12.34s  coverage: 97.6% of statements`,
-					`?       github.com/package/three        [no test files]`,
-					`?       github.com/package/four        [no test files]`,
-					`ok      github.com/package/five      123.4s  coverage: 78.6% of statements`,
-					`?       github.com/package/six        [no test files]`,
-					`ok      github.com/package/seven      1234s  coverage: 81.6% of statements`,
-				}, "\n"),
-				WantStderr: "Coverage of package \"github.com/package/five\" (78.6%) must be at least 80.0%\n",
-				WantErr:    fmt.Errorf(`Coverage of package "github.com/package/five" (78.6%%) must be at least 80.0%%`),
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-					},
-				}},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 80.0,
-				}},
+			{
+				name: "Outputs package lines",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+					{Action: "output", Test: "some-test", Output: "test started\n"},
+					{Action: "output", Output: "package output\n"},
+					{Action: "output", Test: "some-test", Output: "test ended\n"},
+				},
+				etc: &command.ExecuteTestCase{
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"package output",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
 			},
-		},
-		{
-			name: "Fails if verbose and min coverage flags provided",
-			etc: &command.ExecuteTestCase{
-				Args:       []string{"-m", "87.8", "-v"},
-				WantStderr: "Can't run verbose output with coverage checks\n",
-				WantErr:    fmt.Errorf("Can't run verbose output with coverage checks"),
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 87.8,
-					verboseFlag.Name():     true,
-				}},
+			{
+				name: "Outputs test lines when verbose flag is provided",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+					{Action: "output", Test: "some-test", Output: "test started\n"},
+					{Action: "output", Output: "package output\n"},
+					{Action: "output", Test: "some-test", Output: "test ended\n"},
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-v"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							".",
+							"-json",
+							"-v",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"test started",
+						"package output",
+						"test ended",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+						verboseFlag.Name():     true,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs with verbose flag",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-v"},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-					verboseFlag.Name():     true,
-				}},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-						``,
-					},
-				}},
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-v",
-					},
-				}},
-				WantStdout: "ok      github.com/package/one      1.234s  coverage: 87.6% of statements\n",
+			{
+				name: "Verbose and timeout flags",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					noTestEvent("p1"),
+					{Action: "output", Test: "some-test", Output: "test started\n"},
+					{Action: "output", Output: "package output\n"},
+					{Action: "output", Test: "some-test", Output: "test ended\n"},
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-v", "-t", "456"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							"-timeout",
+							"456s",
+							".",
+							"-json",
+							"-v",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						"? p1 [no test files]",
+						"test started",
+						"package output",
+						"test ended",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+						verboseFlag.Name():     true,
+						timeoutFlag.Name():     456,
+					}},
+				},
 			},
-		},
-		{
-			name: "Runs with verbose flag and extra output",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-v"},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-					verboseFlag.Name():     true,
-				}},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`=== RUN   TestQMKExecution/load_bindings_in_basic_mode#01`,
-						`--- PASS: TestQMKExecution (0.00s)`,
-						`    --- PASS: TestQMKExecution/qmk_toggle_fails_if_env_variable_is_unset (0.00s)`,
-						`and some lines that`,
-						` are printed!`,
-						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-						``,
-					},
-				}},
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-v",
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					`=== RUN   TestQMKExecution/load_bindings_in_basic_mode#01`,
-					`--- PASS: TestQMKExecution (0.00s)`,
-					`    --- PASS: TestQMKExecution/qmk_toggle_fails_if_env_variable_is_unset (0.00s)`,
-					`and some lines that`,
-					` are printed!`,
-					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-					``,
-				}, "\n"),
+			{
+				name: "Verbose, timeout, and func filter flags",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					coverageTestEvent("p1", 75),
+					{Action: "output", Test: "some-test", Output: "test started\n"},
+					{Action: "output", Output: "package output\n"},
+					{Action: "output", Test: "some-test", Output: "test ended\n"},
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"-v", "-t", "456", "-f", "FuncName", "OtherFunc"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							"-timeout",
+							"456s",
+							".",
+							"-json",
+							"-v",
+							"-run",
+							"(FuncName|OtherFunc)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 75),
+						"test started",
+						"package output",
+						"test ended",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 0.0,
+						verboseFlag.Name():     true,
+						timeoutFlag.Name():     456,
+						funcFilterFlag.Name():  []string{"FuncName", "OtherFunc"},
+					}},
+				},
 			},
-		},
-		// funcFilterFlag tests
-		{
-			name: "Adds func filter arguments",
-			etc: &command.ExecuteTestCase{
-				Args: []string{"-f", "Un", "Deux"},
-				WantData: &command.Data{Values: map[string]interface{}{
-					pathArgs.Name():        []string{"."},
-					minCoverageFlag.Name(): 0.0,
-					funcFilterFlag.Name():  []string{"Un", "Deux"},
-				}},
-				RunResponses: []*command.FakeRun{{
-					Stdout: []string{
-						`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-						``,
-					},
-				}},
-				WantRunContents: []*command.RunContents{{
-					Name: "go",
-					Args: []string{
-						"test",
-						".",
-						"-run",
-						`(Un|Deux)`,
-					},
-				}},
-				WantStdout: strings.Join([]string{
-					`ok      github.com/package/one      1.234s  coverage: 87.6% of statements`,
-					``,
-				}, "\n"),
+			{
+				name: "Fails if coverage and and func filter flags",
+				etc: &command.ExecuteTestCase{
+					Args:    []string{"-m", "33", "-f", "FuncName", "OtherFunc"},
+					WantErr: fmt.Errorf("Cannot set func-filter and min coverage flags simultaneously"),
+					WantStderr: strings.Join([]string{
+						"Cannot set func-filter and min coverage flags simultaneously",
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"."},
+						minCoverageFlag.Name(): 33.0,
+						funcFilterFlag.Name():  []string{"FuncName", "OtherFunc"},
+					}},
+				},
 			},
-		},
-		/* Useful for commenting out tests. */
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			test.etc.Node = (&goCLI{}).Node()
-			if test.events != nil {
-				var frs []string
-				for _, e := range test.events {
-					b, err := json.Marshal(e)
-					if err != nil {
-						t.Fatalf("Failed to marshal event to json: %v", err)
+			{
+				name: "Handles multiple packages",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					{Action: "success", Package: "p2"},
+					{Action: "success", Package: "p3"},
+					coverageTestEvent("p1", 75),
+					noTestEvent("p2"),
+					coverageTestEvent("p3", 44),
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"./..."},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							"./...",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 75),
+						"? p2 [no test files]",
+						coverageEventOutput("p3", 44),
+						"",
+					}, "\n"),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"./..."},
+						minCoverageFlag.Name(): 0.0,
+					}},
+				},
+			},
+			{
+				name: "Outputs errors for multiple packages",
+				events: []*goTestEvent{
+					{Action: "success", Package: "p1"},
+					{Action: "success", Package: "p2"},
+					{Action: "success", Package: "p3"},
+					coverageTestEvent("p1", 75),
+					// Missing p2 info
+					coverageTestEvent("p3", 43.2), // Insufficient p3 info
+				},
+				etc: &command.ExecuteTestCase{
+					Args: []string{"./...", "-m", "50"},
+					WantRunContents: []*command.RunContents{{
+						Name: "go",
+						Args: []string{
+							"test",
+							"./...",
+							"-json",
+							"-coverprofile=(New-TemporaryFile)",
+						},
+					}},
+					WantStdout: strings.Join([]string{
+						coverageEventOutput("p1", 75),
+						coverageEventOutput("p3", 43.2),
+						"",
+					}, "\n"),
+					WantStderr: strings.Join([]string{
+						"No coverage set for package: p2",
+						`Coverage of package "p3" (43.2%) must be at least 50.0%`,
+						"",
+					}, "\n"),
+					WantErr: fmt.Errorf(`Coverage of package "p3" (43.2%%) must be at least 50.0%%`),
+					WantData: &command.Data{Values: map[string]interface{}{
+						pathArgs.Name():        []string{"./..."},
+						minCoverageFlag.Name(): 50.0,
+					}},
+				},
+			},
+			/* Useful for commenting out tests. */
+		} {
+			t.Run(fmt.Sprintf("[%s] %s", curOS.Name(), test.name), func(t *testing.T) {
+				command.StubValue(t, &sourcerer.CurrentOS, curOS)
+
+				if curOS.Name() == "linux" {
+					for _, rc := range test.etc.WantRunContents {
+						for i, a := range rc.Args {
+							if a == "-coverprofile=(New-TemporaryFile)" {
+								rc.Args[i] = "-coverprofile=$(mktemp)"
+							}
+						}
 					}
-					frs = append(frs, string(b))
 				}
-				test.etc.RunResponses = []*command.FakeRun{{
-					Stdout: frs,
-				}}
-			}
-			command.ExecuteTest(t, test.etc)
-		})
+
+				test.etc.Node = (&goCLI{}).Node()
+				if test.events != nil {
+					var frs []string
+					for _, e := range test.events {
+						b, err := json.Marshal(e)
+						if err != nil {
+							t.Fatalf("Failed to marshal event to json: %v", err)
+						}
+						frs = append(frs, string(b))
+					}
+					test.etc.RunResponses = []*command.FakeRun{{
+						Stdout: frs,
+					}}
+				}
+				command.ExecuteTest(t, test.etc)
+			})
+		}
 	}
 }
 

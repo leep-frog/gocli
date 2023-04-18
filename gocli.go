@@ -28,8 +28,8 @@ func (gc *goCLI) Setup() []string { return nil }
 func (gc *goCLI) Name() string    { return "gt" }
 
 var (
-	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements$`)
-	noTestRegex   = regexp.MustCompile("^\\?.*\\[no test files\\]\n?$")
+	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements` + "\n?$")
+	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]` + "\n?$")
 
 	findTestRegex = regexp.MustCompile(`^func\s+Test([a-zA-Z0-9_]*)\b.*\*testing\.[A-Z]\b`)
 	testFileRegex = regexp.MustCompile(`.*_test.go$`)
@@ -105,17 +105,26 @@ type coverageInfo struct {
 	coverage float64
 }
 
+func (ci *coverageInfo) String() string {
+	return fmt.Sprintf("{Coverage: %0.2f, Line: %q}", ci.coverage, ci.line)
+}
+
+type packageResult struct {
+	status  string
+	success bool
+}
+
 type goTestEventHandler struct {
-	packageResults map[string]bool
+	packageResults map[string]*packageResult
 	coverage       map[string]*coverageInfo
 	err            error
 }
 
-func (eh *goTestEventHandler) setPackageResult(p, action string, res bool) error {
+func (eh *goTestEventHandler) setPackageResult(p, action string) error {
 	if r, ok := eh.packageResults[p]; ok {
-		return fmt.Errorf("Duplicate package results: %v, %s", r, action)
+		return fmt.Errorf("Duplicate package results: %s, %s", r.status, action)
 	}
-	eh.packageResults[p] = res
+	eh.packageResults[p] = &packageResult{action, action == "success"}
 	return nil
 }
 
@@ -150,7 +159,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 	if e.Test == "" {
 		switch e.Action {
 		case "success", "failure":
-			if err := eh.setPackageResult(e.Package, e.Action, e.Action == "success"); err != nil {
+			if err := eh.setPackageResult(e.Package, e.Action); err != nil {
 				return err
 			}
 		case "output":
@@ -158,7 +167,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 			var setCoverage *coverageInfo
 			if noTestRegex.MatchString(e.Output) {
 				setCoverage = &coverageInfo{
-					line:     e.Output,
+					line:     strings.TrimSpace(e.Output),
 					coverage: noTestFiles,
 				}
 			} else if m := coverageRegex.FindStringSubmatch(e.Output); len(m) > 0 {
@@ -167,7 +176,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 					return fmt.Errorf("failed to parse coverage value: %v", err)
 				}
 				setCoverage = &coverageInfo{
-					line:     e.Output,
+					line:     strings.TrimSpace(e.Output),
 					coverage: f,
 				}
 			}
@@ -205,9 +214,6 @@ func (gc *goCLI) Node() command.Node {
 		&command.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
 			// Error if verbose and coverage check
 			mc := minCoverageFlag.Get(d)
-			if d.Has(verboseFlag.Name()) && mc != 0 {
-				return o.Stderrln("Can't run verbose output with coverage checks")
-			}
 
 			// Construct go test
 			args := []string{
@@ -222,6 +228,9 @@ func (gc *goCLI) Node() command.Node {
 				args = append(args, "-v")
 			}
 			if d.Has(funcFilterFlag.Name()) {
+				if mc > 0.0 {
+					return o.Stderrln("Cannot set func-filter and min coverage flags simultaneously")
+				}
 				parens := fmt.Sprintf("(%s)", strings.Join(funcFilterFlag.Get(d), "|"))
 				args = append(args, "-run", parens)
 			} else if sourcerer.CurrentOS.Name() == "linux" {
@@ -232,7 +241,7 @@ func (gc *goCLI) Node() command.Node {
 
 			// Run the command
 			eh := &goTestEventHandler{
-				packageResults: map[string]bool{},
+				packageResults: map[string]*packageResult{},
 				coverage:       map[string]*coverageInfo{},
 			}
 			sc := &command.ShellCommand[[]string]{
@@ -254,7 +263,8 @@ func (gc *goCLI) Node() command.Node {
 			for _, p := range packages {
 				coverage, ok := eh.coverage[p]
 				if !ok {
-					return o.Stderrf("No coverage set for package: %s", p)
+					retErr = o.Stderrf("No coverage set for package: %s\n", p)
+					continue
 				}
 
 				if coverage.coverage == noTestFiles {
@@ -263,6 +273,7 @@ func (gc *goCLI) Node() command.Node {
 
 				if coverage.coverage < mc {
 					retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(coverage.coverage), percentFormat(mc))
+					continue
 				}
 			}
 
