@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,12 @@ import (
 func CLI() sourcerer.CLI {
 	return &goCLI{}
 }
+
+var (
+	tmpFile = func() (*os.File, error) {
+		return ioutil.TempFile("", "leepGocli")
+	}
+)
 
 type goCLI struct{}
 
@@ -233,10 +240,12 @@ func (gc *goCLI) Node() command.Node {
 				}
 				parens := fmt.Sprintf("(%s)", strings.Join(funcFilterFlag.Get(d), "|"))
 				args = append(args, "-run", parens)
-			} else if sourcerer.CurrentOS.Name() == "linux" {
-				args = append(args, "-coverprofile=$(mktemp)")
 			} else {
-				args = append(args, "-coverprofile=(New-TemporaryFile)")
+				tmp, err := tmpFile()
+				if err != nil {
+					return o.Annotatef(err, "failed to create temporary file")
+				}
+				args = append(args, fmt.Sprintf("-coverprofile=%s", tmp.Name()))
 			}
 
 			// Run the command
