@@ -203,7 +203,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 				}
 				eh.coverage[e.Package] = setCoverage
 			}
-		case "skip":
+		case "skip", "start":
 		default:
 			return fmt.Errorf("Unknown package event action: %q", e.Action)
 		}

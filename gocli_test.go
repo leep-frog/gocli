@@ -121,9 +121,10 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "Ignores skip action",
+			name: "Ignore actions action",
 			events: []*goTestEvent{
 				{Action: "skip", Package: "p1"},
+				{Action: "start", Package: "p1"},
 				noTestEvent("p1"),
 			},
 			etc: &command.ExecuteTestCase{
