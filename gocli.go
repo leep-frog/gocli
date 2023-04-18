@@ -142,7 +142,7 @@ type goTestEvent struct {
 	Output  string
 	// Specific to individual test cases
 	Test    string
-	Elapsed int
+	Elapsed float64
 }
 
 func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *command.Data, bLines []byte) error {
