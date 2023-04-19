@@ -28,6 +28,12 @@ var (
 	}
 )
 
+type testNode struct {
+	output []string
+	failed bool
+	parent *testNode
+}
+
 type goCLI struct{}
 
 func (gc *goCLI) Changed() bool   { return false }
@@ -125,8 +131,9 @@ type goTestEventHandler struct {
 	packageResults map[string]*packageResult
 	coverage       map[string]*coverageInfo
 	// Map from test name to outputs
-	testOutputs map[string][]string
-	err         error
+	// testOutputs map[string][]string
+	testNode *testNode
+	err      error
 }
 
 func (eh *goTestEventHandler) setPackageResult(p, action string) error {
@@ -166,6 +173,7 @@ func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *com
 }
 
 func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Data, line []byte) error {
+	vb := verboseFlag.Get(data)
 	e := &goTestEvent{}
 	if err := json.Unmarshal(line, e); err != nil {
 		return fmt.Errorf("failed to parse go event (%s): %v", line, err)
@@ -209,24 +217,43 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 		default:
 			return fmt.Errorf("unknown package event action: %q", e.Action)
 		}
-	} else {
-		// Test event
-		switch e.Action {
-		case "fail":
-			// If verbose flag is set, then everything is outputted anyway
-			if !verboseFlag.Get(data) {
-				output.Stdoutf(strings.Join(eh.testOutputs[e.Test], ""))
-			}
-		case "output":
-			if verboseFlag.Get(data) {
-				output.Stdoutf(e.Output)
-			} else {
-				eh.testOutputs[e.Test] = append(eh.testOutputs[e.Test], e.Output)
-			}
-		case "pass", "run":
-		default:
-			return fmt.Errorf("unknown test event action: %q", e.Action)
+		return nil
+	}
+
+	// Otherwise, it is an event for a test
+
+	// If verbose, then just all output
+	if vb {
+		if e.Action == "output" {
+			output.Stdoutf(e.Output)
+			return nil
 		}
+	}
+
+	// Otherwise, a little more complicated
+	switch e.Action {
+	case "run":
+		// First a node is run
+		eh.testNode = &testNode{parent: eh.testNode}
+	case "output":
+		// Then its output is logged
+		eh.testNode.output = append(eh.testNode.output, e.Output)
+	case "fail":
+		var outputs [][]string
+		for node := eh.testNode; node != nil && !node.failed; node = node.parent {
+			node.failed = true
+			outputs = append(outputs, node.output)
+		}
+		for i := len(outputs) - 1; i >= 0; i-- {
+			for _, o := range outputs[i] {
+				output.Stdoutf(o)
+			}
+		}
+		fallthrough
+	case "pass":
+		eh.testNode = eh.testNode.parent
+	default:
+		return fmt.Errorf("unknown test event action: %q", e.Action)
 	}
 	return nil
 }
@@ -274,7 +301,6 @@ func (gc *goCLI) Node() command.Node {
 			eh := &goTestEventHandler{
 				packageResults: map[string]*packageResult{},
 				coverage:       map[string]*coverageInfo{},
-				testOutputs:    map[string][]string{},
 			}
 			sc := &command.ShellCommand[[]string]{
 				CommandName:           "go",
