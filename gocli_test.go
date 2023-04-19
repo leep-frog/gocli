@@ -52,8 +52,8 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if shell command fails",
 			etc: &command.ExecuteTestCase{
-				WantStderr: "failed to execute shell command: bad news bears\n",
-				WantErr:    fmt.Errorf("failed to execute shell command: bad news bears"),
+				WantStderr: "go test shell command error: failed to execute shell command: bad news bears\n",
+				WantErr:    fmt.Errorf("go test shell command error: failed to execute shell command: bad news bears"),
 				RunResponses: []*command.FakeRun{{
 					Err: fmt.Errorf("bad news bears"),
 				}},
@@ -78,8 +78,8 @@ func TestExecute(t *testing.T) {
 				{Action: "ugh", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
-				WantErr:    fmt.Errorf("Unknown package event action: \"ugh\""),
-				WantStderr: "Unknown package event action: \"ugh\"\n",
+				WantErr:    fmt.Errorf("event handling error: unknown package event action: \"ugh\""),
+				WantStderr: "event handling error: unknown package event action: \"ugh\"\n",
 				WantRunContents: []*command.RunContents{{
 					Name: "go",
 					Args: []string{
@@ -98,9 +98,9 @@ func TestExecute(t *testing.T) {
 		{
 			name: "Fails if invalid json",
 			etc: &command.ExecuteTestCase{
-				WantErr: fmt.Errorf("failed to parse go event (} bleh {): invalid character '}' looking for beginning of value"),
+				WantErr: fmt.Errorf("event handling error: failed to parse go event (} bleh {): invalid character '}' looking for beginning of value"),
 				WantStderr: strings.Join([]string{
-					"failed to parse go event (} bleh {): invalid character '}' looking for beginning of value\n",
+					"event handling error: failed to parse go event (} bleh {): invalid character '}' looking for beginning of value\n",
 				}, "\n"),
 				RunResponses: []*command.FakeRun{{
 					Stdout: []string{"} bleh {"},
@@ -283,9 +283,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf(`Duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00%% of statements"}`),
+				WantErr: fmt.Errorf(`event handling error: duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00%% of statements"}`),
 				WantStderr: strings.Join([]string{
-					`Duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00% of statements"}`,
+					`event handling error: duplicate package coverage: {Coverage: -1.00, Line: "? p1 [no test files]"}, {Coverage: 1.00, Line: "ok p1 coverage: 1.00% of statements"}`,
 					"",
 				}, "\n"),
 				WantStdout: strings.Join([]string{
@@ -315,9 +315,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: pass, fail"),
+				WantErr: fmt.Errorf("event handling error: duplicate package results: pass, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: pass, fail",
+					"event handling error: duplicate package results: pass, fail",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -342,9 +342,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: fail, fail"),
+				WantErr: fmt.Errorf("event handling error: duplicate package results: fail, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: fail, fail",
+					"event handling error: duplicate package results: fail, fail",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -372,9 +372,9 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantErr: fmt.Errorf("Duplicate package results: pass, fail"),
+				WantErr: fmt.Errorf("event handling error: duplicate package results: pass, fail"),
 				WantStderr: strings.Join([]string{
-					"Duplicate package results: pass, fail",
+					"event handling error: duplicate package results: pass, fail",
 					"",
 				}, "\n"),
 				WantStdout: strings.Join([]string{
@@ -589,13 +589,20 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "Outputs test lines when verbose flag is provided",
+			name: "Outputs test lines for pass and fail when verbose flag is provided",
 			events: []*goTestEvent{
 				{Action: "pass", Package: "p1"},
 				noTestEvent("p1"),
-				{Action: "output", Test: "some-test", Output: "test started\n"},
+				{Action: "output", Test: "some-test-1", Output: "test 1 started\n"},
 				{Action: "output", Output: "package output\n"},
-				{Action: "output", Test: "some-test", Output: "test ended\n"},
+				{Action: "output", Test: "some-test-1", Output: "test 1 working\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 started\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 working\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 ended\n"},
+				{Action: "output", Test: "some-test-1", Output: "test 1 ended\n"},
+				{Action: "pass", Test: "some-test-2"},
+				{Action: "output", Output: "more package info\n"},
+				{Action: "fail", Test: "some-test-1"},
 			},
 			etc: &command.ExecuteTestCase{
 				Args: []string{"-v"},
@@ -611,15 +618,61 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					"? p1 [no test files]",
-					"test started",
 					"package output",
-					"test ended",
+					"test 2 started",
+					"test 2 working",
+					"test 2 ended",
+					"more package info",
+					"test 1 started",
+					"test 1 working",
+					"test 1 ended",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
 					pathArgs.Name():        []string{"."},
 					minCoverageFlag.Name(): 0.0,
 					verboseFlag.Name():     true,
+				}},
+			},
+		},
+		{
+			name: "Outputs only failed tests if verbose flag is not set",
+			events: []*goTestEvent{
+				{Action: "pass", Package: "p1"},
+				noTestEvent("p1"),
+				{Action: "output", Test: "some-test-1", Output: "test 1 started\n"},
+				{Action: "output", Output: "package output\n"},
+				{Action: "output", Test: "some-test-1", Output: "test 1 working\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 started\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 working\n"},
+				{Action: "output", Test: "some-test-2", Output: "test 2 ended\n"},
+				{Action: "output", Test: "some-test-1", Output: "test 1 ended\n"},
+				{Action: "pass", Test: "some-test-2"},
+				{Action: "output", Output: "more package info\n"},
+				{Action: "fail", Test: "some-test-1"},
+			},
+			etc: &command.ExecuteTestCase{
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantStdout: strings.Join([]string{
+					"? p1 [no test files]",
+					"package output",
+					"more package info",
+					"test 1 started",
+					"test 1 working",
+					"test 1 ended",
+					"",
+				}, "\n"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
 				}},
 			},
 		},
@@ -631,6 +684,7 @@ func TestExecute(t *testing.T) {
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
 				{Action: "output", Test: "some-test", Output: "test ended\n"},
+				{Action: "pass", Test: "some-test"},
 			},
 			etc: &command.ExecuteTestCase{
 				Args: []string{"-v", "-t", "456"},
@@ -648,8 +702,8 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					"? p1 [no test files]",
-					"test started",
 					"package output",
+					"test started",
 					"test ended",
 					"",
 				}, "\n"),
@@ -669,6 +723,7 @@ func TestExecute(t *testing.T) {
 				{Action: "output", Test: "some-test", Output: "test started\n"},
 				{Action: "output", Output: "package output\n"},
 				{Action: "output", Test: "some-test", Output: "test ended\n"},
+				{Action: "pass", Test: "some-test"},
 			},
 			etc: &command.ExecuteTestCase{
 				Args: []string{"-v", "-t", "456", "-f", "FuncName", "OtherFunc"},
@@ -687,8 +742,8 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					coverageEventOutput("p1", 75),
-					"test started",
 					"package output",
+					"test started",
 					"test ended",
 					"",
 				}, "\n"),

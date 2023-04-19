@@ -124,12 +124,14 @@ type packageResult struct {
 type goTestEventHandler struct {
 	packageResults map[string]*packageResult
 	coverage       map[string]*coverageInfo
-	err            error
+	// Map from test name to outputs
+	testOutputs map[string][]string
+	err         error
 }
 
 func (eh *goTestEventHandler) setPackageResult(p, action string) error {
 	if r, ok := eh.packageResults[p]; ok {
-		return fmt.Errorf("Duplicate package results: %s, %s", r.status, action)
+		return fmt.Errorf("duplicate package results: %s, %s", r.status, action)
 	}
 	eh.packageResults[p] = &packageResult{action, action == "pass"}
 	return nil
@@ -199,18 +201,26 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 			if setCoverage != nil {
 				// Check if it's already set
 				if c, ok := eh.coverage[e.Package]; ok {
-					return fmt.Errorf("Duplicate package coverage: %v, %v", c, setCoverage)
+					return fmt.Errorf("duplicate package coverage: %v, %v", c, setCoverage)
 				}
 				eh.coverage[e.Package] = setCoverage
 			}
 		case "skip", "start":
 		default:
-			return fmt.Errorf("Unknown package event action: %q", e.Action)
+			return fmt.Errorf("unknown package event action: %q", e.Action)
 		}
 	} else {
 		// Test event
-		if verboseFlag.Get(data) && e.Action == "output" {
-			output.Stdoutf(e.Output)
+		switch e.Action {
+		case "pass":
+			if !verboseFlag.Get(data) {
+				break
+			}
+			fallthrough
+		case "fail":
+			output.Stdoutf(strings.Join(eh.testOutputs[e.Test], ""))
+		case "output":
+			eh.testOutputs[e.Test] = append(eh.testOutputs[e.Test], e.Output)
 		}
 	}
 	return nil
@@ -259,6 +269,7 @@ func (gc *goCLI) Node() command.Node {
 			eh := &goTestEventHandler{
 				packageResults: map[string]*packageResult{},
 				coverage:       map[string]*coverageInfo{},
+				testOutputs:    map[string][]string{},
 			}
 			sc := &command.ShellCommand[[]string]{
 				CommandName:           "go",
@@ -266,10 +277,10 @@ func (gc *goCLI) Node() command.Node {
 				OutputStreamProcessor: eh.streamFuncWrapper,
 			}
 			if _, err := sc.Run(o, d); err != nil {
-				return o.Err(err)
+				return o.Annotatef(err, "go test shell command error")
 			}
 			if eh.err != nil {
-				return o.Err(eh.err)
+				return o.Annotatef(eh.err, "event handling error")
 			}
 
 			// Error to return
