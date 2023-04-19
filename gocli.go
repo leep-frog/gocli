@@ -220,7 +220,7 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 		// case "fail":
 		// 	output.Stdoutf(strings.Join(eh.testOutputs[e.Test], ""))
 		case "output":
-			eh.testOutputs[e.Test] = append(eh.testOutputs[e.Test], e.Output)
+			output.Stdoutf(e.Output)
 		}
 	}
 	return nil
