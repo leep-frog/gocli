@@ -212,15 +212,20 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 	} else {
 		// Test event
 		switch e.Action {
-		// case "pass":
-		// 	if !verboseFlag.Get(data) {
-		// 		break
-		// 	}
-		// 	fallthrough
-		// case "fail":
-		// 	output.Stdoutf(strings.Join(eh.testOutputs[e.Test], ""))
+		case "fail":
+			// If verbose flag is set, then everything is outputted anyway
+			if !verboseFlag.Get(data) {
+				output.Stdoutf(strings.Join(eh.testOutputs[e.Test], ""))
+			}
 		case "output":
-			output.Stdoutf(e.Output)
+			if verboseFlag.Get(data) {
+				output.Stdoutf(e.Output)
+			} else {
+				eh.testOutputs[e.Test] = append(eh.testOutputs[e.Test], e.Output)
+			}
+		case "pass", "run":
+		default:
+			return fmt.Errorf("unknown test event action: %q", e.Action)
 		}
 	}
 	return nil

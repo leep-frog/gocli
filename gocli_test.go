@@ -73,13 +73,36 @@ func TestExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "Fails if unknown action",
+			name: "Fails if unknown action for package",
 			events: []*goTestEvent{
 				{Action: "ugh", Package: "p1"},
 			},
 			etc: &command.ExecuteTestCase{
 				WantErr:    fmt.Errorf("event handling error: unknown package event action: \"ugh\""),
 				WantStderr: "event handling error: unknown package event action: \"ugh\"\n",
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-json",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Fails if unknown action for test",
+			events: []*goTestEvent{
+				{Action: "idk", Package: "p1", Test: "some-test"},
+			},
+			etc: &command.ExecuteTestCase{
+				WantErr:    fmt.Errorf("event handling error: unknown test event action: \"idk\""),
+				WantStderr: "event handling error: unknown test event action: \"idk\"\n",
 				WantRunContents: []*command.RunContents{{
 					Name: "go",
 					Args: []string{
@@ -125,6 +148,8 @@ func TestExecute(t *testing.T) {
 			events: []*goTestEvent{
 				{Action: "skip", Package: "p1"},
 				{Action: "start", Package: "p1"},
+				{Action: "pass", Package: "p1", Test: "some-test"},
+				{Action: "run", Package: "p1", Test: "some-test"},
 				noTestEvent("p1"),
 			},
 			etc: &command.ExecuteTestCase{
@@ -618,14 +643,14 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					"? p1 [no test files]",
+					"test 1 started",
 					"package output",
+					"test 1 working",
 					"test 2 started",
 					"test 2 working",
 					"test 2 ended",
-					"more package info",
-					"test 1 started",
-					"test 1 working",
 					"test 1 ended",
+					"more package info",
 					"",
 				}, "\n"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -702,8 +727,8 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					"? p1 [no test files]",
-					"package output",
 					"test started",
+					"package output",
 					"test ended",
 					"",
 				}, "\n"),
@@ -742,8 +767,8 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStdout: strings.Join([]string{
 					coverageEventOutput("p1", 75),
-					"package output",
 					"test started",
+					"package output",
 					"test ended",
 					"",
 				}, "\n"),
