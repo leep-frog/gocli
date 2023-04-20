@@ -2,7 +2,6 @@ package gocli
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -28,12 +27,6 @@ var (
 	}
 )
 
-type testNode struct {
-	output []string
-	failed bool
-	parent *testNode
-}
-
 type goCLI struct{}
 
 func (gc *goCLI) Changed() bool   { return false }
@@ -41,8 +34,9 @@ func (gc *goCLI) Setup() []string { return nil }
 func (gc *goCLI) Name() string    { return "gt" }
 
 var (
-	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s.*coverage: +([0-9]+\.[0-9]+)% of statements` + "\n?$")
-	noTestRegex   = regexp.MustCompile(`^\?.*\[no test files\]` + "\n?$")
+	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s+coverage:\s+([0-9]+\.[0-9]+)% of statements` + "\n?$")
+	noTestRegex   = regexp.MustCompile(`^\?\s+([^\s]+)\s+\[no test files\]` + "\n?$")
+	testFailRegex = regexp.MustCompile(`^FAIL\s+([^\s]+)\s+`)
 
 	findTestRegex = regexp.MustCompile(`^func\s+Test([a-zA-Z0-9_]*)\b.*\*testing\.[A-Z]\b`)
 	testFileRegex = regexp.MustCompile(`.*_test.go$`)
@@ -108,153 +102,63 @@ func percentFormat(f float64) string {
 	return fmt.Sprintf("%3.1f%%", f)
 }
 
+type testResult int
+
 const (
-	noTestFiles   = -1.0
-	unsetCoverage = -2.0
+	noTestFiles testResult = iota
+	testSuccess
+	testFailure
 )
 
-type coverageInfo struct {
-	line     string
-	coverage float64
-}
-
-func (ci *coverageInfo) String() string {
-	return fmt.Sprintf("{Coverage: %0.2f, Line: %q}", ci.coverage, ci.line)
-}
-
 type packageResult struct {
-	status string
-	pass   bool
+	TestResult testResult
+	Coverage   float64
+	Line       string
 }
 
 type goTestEventHandler struct {
 	packageResults map[string]*packageResult
-	coverage       map[string]*coverageInfo
-	// Map from test name to outputs
-	// testOutputs map[string][]string
-	testNode *testNode
-	err      error
+	err            error
 }
 
-func (eh *goTestEventHandler) setPackageResult(p, action string) error {
-	if r, ok := eh.packageResults[p]; ok {
-		return fmt.Errorf("duplicate package results: %s, %s", r.status, action)
+func (eh *goTestEventHandler) setPackageResult(pkg, line string, tr testResult, coverage float64) error {
+	if r, ok := eh.packageResults[pkg]; ok {
+		return fmt.Errorf("Multiple results for package %q:\n  Result 1: %s\n  Result 2: %s", pkg, r.Line, line)
 	}
-	eh.packageResults[p] = &packageResult{action, action == "pass"}
+	eh.packageResults[pkg] = &packageResult{
+		TestResult: tr,
+		Coverage:   coverage,
+		Line:       line,
+	}
 	return nil
 }
 
-type goTestEvent struct {
-	Time    string
-	Action  string
-	Package string
-	Output  string
-	// Specific to individual test cases
-	Test    string
-	Elapsed float64
-}
-
-func (eh *goTestEventHandler) streamFuncWrapper(output command.Output, data *command.Data, bLines []byte) error {
+func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Data, bLine []byte) error {
 	if eh.err != nil {
 		return nil
 	}
 
-	for _, line := range strings.Split(string(bLines), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		if err := eh.streamFunc(output, data, []byte(line)); err != nil {
-			eh.err = err
-			// Stop processing additional lines if error
-			return nil
-		}
-	}
+	eh.err = eh.processLine(string(bLine))
 	return nil
 }
 
-func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Data, line []byte) error {
-	vb := verboseFlag.Get(data)
-	e := &goTestEvent{}
-	if err := json.Unmarshal(line, e); err != nil {
-		return fmt.Errorf("failed to parse go event (%s): %v", line, err)
+func (eh *goTestEventHandler) processLine(line string) error {
+	if m := noTestRegex.FindStringSubmatch(line); m != nil {
+		return eh.setPackageResult(m[1], line, noTestFiles, 0)
 	}
 
-	// Package event
-	if e.Test == "" {
-		switch e.Action {
-		case "pass", "fail":
-			if err := eh.setPackageResult(e.Package, e.Action); err != nil {
-				return err
-			}
-		case "output":
-			output.Stdout(e.Output)
-			var setCoverage *coverageInfo
-			if noTestRegex.MatchString(e.Output) {
-				setCoverage = &coverageInfo{
-					line:     strings.TrimSpace(e.Output),
-					coverage: noTestFiles,
-				}
-			} else if m := coverageRegex.FindStringSubmatch(e.Output); len(m) > 0 {
-				f, err := strconv.ParseFloat(m[2], 64)
-				if err != nil {
-					return fmt.Errorf("failed to parse coverage value: %v", err)
-				}
-				setCoverage = &coverageInfo{
-					line:     strings.TrimSpace(e.Output),
-					coverage: f,
-				}
-			}
-
-			// Set the coverage
-			if setCoverage != nil {
-				// Check if it's already set
-				if c, ok := eh.coverage[e.Package]; ok {
-					return fmt.Errorf("duplicate package coverage: %v, %v", c, setCoverage)
-				}
-				eh.coverage[e.Package] = setCoverage
-			}
-		case "skip", "start":
-		default:
-			return fmt.Errorf("unknown package event action: %q", e.Action)
+	if m := coverageRegex.FindStringSubmatch(line); m != nil {
+		coverage, err := strconv.ParseFloat(m[2], 64)
+		if err != nil {
+			return fmt.Errorf("failed to parse coverage value: %v", err)
 		}
-		return nil
+		return eh.setPackageResult(m[1], line, testSuccess, coverage)
 	}
 
-	// Otherwise, it is an event for a test
-
-	// If verbose, then just all output
-	if vb {
-		if e.Action == "output" {
-			output.Stdoutf(e.Output)
-			return nil
-		}
+	if m := testFailRegex.FindStringSubmatch(line); m != nil {
+		return eh.setPackageResult(m[1], line, testFailure, 0)
 	}
 
-	// Otherwise, a little more complicated
-	switch e.Action {
-	case "run":
-		// First a node is run
-		eh.testNode = &testNode{parent: eh.testNode}
-	case "output":
-		// Then its output is logged
-		eh.testNode.output = append(eh.testNode.output, e.Output)
-	case "fail":
-		var outputs [][]string
-		for node := eh.testNode; node != nil && !node.failed; node = node.parent {
-			node.failed = true
-			outputs = append(outputs, node.output)
-		}
-		for i := len(outputs) - 1; i >= 0; i-- {
-			for _, o := range outputs[i] {
-				output.Stdoutf(o)
-			}
-		}
-		fallthrough
-	case "pass":
-		eh.testNode = eh.testNode.parent
-	default:
-		return fmt.Errorf("unknown test event action: %q", e.Action)
-	}
 	return nil
 }
 
@@ -279,7 +183,6 @@ func (gc *goCLI) Node() command.Node {
 				args = append(args, "-timeout", fmt.Sprintf("%ds", timeoutFlag.Get(d)))
 			}
 			args = append(args, pathArgs.Get(d)...)
-			args = append(args, "-json")
 			if verboseFlag.Get(d) {
 				args = append(args, "-v")
 			}
@@ -300,12 +203,12 @@ func (gc *goCLI) Node() command.Node {
 			// Run the command
 			eh := &goTestEventHandler{
 				packageResults: map[string]*packageResult{},
-				coverage:       map[string]*coverageInfo{},
 			}
 			sc := &command.ShellCommand[[]string]{
 				CommandName:           "go",
 				Args:                  args,
-				OutputStreamProcessor: eh.streamFuncWrapper,
+				OutputStreamProcessor: eh.streamFunc,
+				ForwardStdout:         true,
 			}
 			if _, err := sc.Run(o, d); err != nil {
 				return o.Annotatef(err, "go test shell command error")
@@ -319,25 +222,22 @@ func (gc *goCLI) Node() command.Node {
 			slices.Sort(packages)
 			var retErr error
 			for _, p := range packages {
-				if !eh.packageResults[p].pass {
+				pr := eh.packageResults[p]
+				switch pr.TestResult {
+				case noTestFiles:
+				case testFailure:
 					retErr = o.Stderrf("Tests failed for package: %s\n", p)
-					continue
+				case testSuccess:
+					if pr.Coverage < mc {
+						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(pr.Coverage), percentFormat(mc))
+						continue
+					}
 				}
+			}
 
-				coverage, ok := eh.coverage[p]
-				if !ok {
-					retErr = o.Stderrf("No coverage set for package: %s\n", p)
-					continue
-				}
-
-				if coverage.coverage == noTestFiles {
-					continue
-				}
-
-				if coverage.coverage < mc {
-					retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(coverage.coverage), percentFormat(mc))
-					continue
-				}
+			// Set data for use in tests
+			if len(eh.packageResults) > 0 {
+				d.Set("COVERAGE", eh.packageResults)
 			}
 
 			return retErr

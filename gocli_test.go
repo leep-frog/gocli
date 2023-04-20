@@ -1,7 +1,6 @@
 package gocli
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -10,46 +9,308 @@ import (
 	"github.com/leep-frog/command"
 )
 
-func noTestEvent(pkg string) *goTestEvent {
-	return &goTestEvent{
-		Action:  "output",
-		Package: pkg,
-		Output:  fmt.Sprintf("? %s [no test files]\n", pkg),
-	}
+func successOutput(pkg string, coverage float64) string {
+	return fmt.Sprintf("ok \t %s \t coverage: \t %0.2f%% of statements", pkg, coverage)
 }
 
-func marshalEvents(t *testing.T, events ...*goTestEvent) string {
-	var r []string
-	for _, e := range events {
-		b, err := json.Marshal(e)
-		if err != nil {
-			t.Fatalf("Failed to marshal event to json: %v", err)
-		}
-		r = append(r, string(b))
-	}
-	return strings.Join(r, "\n")
+func failLine(pkg string) string {
+	return fmt.Sprintf("FAIL \t %s \t abc \t 123 def", pkg)
 }
 
-func coverageTestEvent(pkg string, coverage float64) *goTestEvent {
-	return &goTestEvent{
-		Action:  "output",
-		Package: pkg,
-		Output:  coverageEventOutput(pkg, coverage) + "\n",
-	}
-}
-
-func coverageEventOutput(pkg string, coverage float64) string {
-	return fmt.Sprintf("ok %s coverage: %0.2f%% of statements", pkg, coverage)
+func noTestLine(pkg string) string {
+	return fmt.Sprintf("?       %s        [no test files]", pkg)
 }
 
 func TestExecute(t *testing.T) {
 	for _, test := range []struct {
 		name       string
 		etc        *command.ExecuteTestCase
-		events     []*goTestEvent
 		tmpFileErr error
 	}{
 		{
+			name: "Works when no coverage returned",
+			etc: &command.ExecuteTestCase{
+				RunResponses: []*command.FakeRun{{}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Fails if shell command error",
+			etc: &command.ExecuteTestCase{
+				WantErr:    fmt.Errorf("go test shell command error: failed to execute shell command: bad news bears"),
+				WantStderr: "go test shell command error: failed to execute shell command: bad news bears\n",
+				RunResponses: []*command.FakeRun{{
+					Err: fmt.Errorf("bad news bears"),
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Ignores test input no coverage returned",
+			etc: &command.ExecuteTestCase{
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						"hello there",
+						"general kenobi",
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+				}},
+			},
+		},
+		{
+			name: "Gets coverage result",
+			etc: &command.ExecuteTestCase{
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						"hello there",
+						successOutput("p1", 12.34),
+						"general kenobi",
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testSuccess,
+							12.34,
+							successOutput("p1", 12.34) + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Gets no-test result",
+			etc: &command.ExecuteTestCase{
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						"hello there",
+						noTestLine("p1"),
+						"general kenobi",
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							noTestFiles,
+							0.0,
+							noTestLine("p1") + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Gets test failure result",
+			etc: &command.ExecuteTestCase{
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						"hello there",
+						failLine("p1"),
+						"general kenobi",
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantErr:    fmt.Errorf("Tests failed for package: p1"),
+				WantStderr: "Tests failed for package: p1\n",
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testFailure,
+							0.0,
+							failLine("p1") + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Adds timeout flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-t", "123"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						noTestLine("p1"),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						"-timeout",
+						"123s",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 0.0,
+					timeoutFlag.Name():     123,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							noTestFiles,
+							0.0,
+							noTestLine("p1") + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Succeeds if coverage result is above threshold",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-m", "54.32"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						successOutput("p1", 54.33),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 54.32,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testSuccess,
+							54.33,
+							successOutput("p1", 54.33) + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Succeeds if coverage result is at threshold",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-m", "54.32"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						successOutput("p1", 54.32),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 54.32,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testSuccess,
+							54.32,
+							successOutput("p1", 54.32) + "\n",
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Fails if coverage result is below threshold",
+			etc: &command.ExecuteTestCase{
+				Args: []string{"-m", "54.32"},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						successOutput("p1", 54.31),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantErr:    fmt.Errorf("Coverage of package \"p1\" (54.3%%) must be at least 54.3%%"),
+				WantStderr: "Coverage of package \"p1\" (54.3%) must be at least 54.3%\n",
+				WantData: &command.Data{Values: map[string]interface{}{
+					pathArgs.Name():        []string{"."},
+					minCoverageFlag.Name(): 54.32,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testSuccess,
+							54.31,
+							successOutput("p1", 54.31) + "\n",
+						},
+					},
+				}},
+			},
+		},
+		/*{
 			name: "Fails if shell command fails",
 			etc: &command.ExecuteTestCase{
 				WantStderr: "go test shell command error: failed to execute shell command: bad news bears\n",
@@ -931,18 +1192,8 @@ func TestExecute(t *testing.T) {
 			}
 
 			test.etc.Node = (&goCLI{}).Node()
-			if test.events != nil {
-				var frs []string
-				for _, e := range test.events {
-					b, err := json.Marshal(e)
-					if err != nil {
-						t.Fatalf("Failed to marshal event to json: %v", err)
-					}
-					frs = append(frs, string(b))
-				}
-				test.etc.RunResponses = []*command.FakeRun{{
-					Stdout: frs,
-				}}
+			if test.etc.RunResponses != nil && len(test.etc.RunResponses[0].Stdout) > 0 {
+				test.etc.WantStdout = fmt.Sprintf("%s%s", test.etc.WantStdout, strings.Join(test.etc.RunResponses[0].Stdout, "\n")) + "\n"
 			}
 			command.ExecuteTest(t, test.etc)
 		})
@@ -959,6 +1210,7 @@ func TestAutocomplete(t *testing.T) {
 			ctc: &command.CompleteTestCase{
 				Want: []string{
 					".git/",
+					"testdata/",
 					"testpkg/",
 					" ",
 				},
