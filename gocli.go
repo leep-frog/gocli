@@ -219,6 +219,7 @@ func (gc *goCLI) Node() command.Node {
 
 			// Error to return
 			packages := maps.Keys(eh.packageResults)
+			fmt.Println("PACKAGES", packages)
 			slices.Sort(packages)
 			var retErr error
 			for _, p := range packages {
@@ -226,9 +227,11 @@ func (gc *goCLI) Node() command.Node {
 				switch pr.TestResult {
 				case noTestFiles:
 				case testFailure:
+					fmt.Println("BAD NEWS BEARS1")
 					retErr = o.Stderrf("Tests failed for package: %s\n", p)
 				case testSuccess:
 					if pr.Coverage < mc {
+						fmt.Println("BAD NEWS BEARS2")
 						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(pr.Coverage), percentFormat(mc))
 						continue
 					}
