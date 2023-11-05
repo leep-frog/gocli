@@ -232,7 +232,7 @@ func (gc *goCLI) Node() command.Node {
 
 			if packageCountFlag.Provided(d) {
 				if expectedPackageCount := packageCountFlag.Get(d); expectedPackageCount != len(packages) {
-					return o.Stderrf("Expected %d packages, got %d: %v", expectedPackageCount, len(packages), packages)
+					return o.Stderrf("Expected %d packages, got %d:\n%s\n", expectedPackageCount, len(packages), strings.Join(packages, "\n"))
 				}
 			}
 

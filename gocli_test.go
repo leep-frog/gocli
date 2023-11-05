@@ -572,8 +572,15 @@ func TestExecute(t *testing.T) {
 						"-coverprofile=(TMP_FILE)",
 					},
 				}},
-				WantStderr: "Expected 5 packages, got 4: [p1 p2 p3 p4]",
-				WantErr:    fmt.Errorf("Expected 5 packages, got 4: [p1 p2 p3 p4]"),
+				WantStderr: strings.Join([]string{
+					"Expected 5 packages, got 4:",
+					"p1",
+					"p2",
+					"p3",
+					"p4",
+					"",
+				}, "\n"),
+				WantErr: fmt.Errorf("Expected 5 packages, got 4:\np1\np2\np3\np4"),
 				WantData: &command.Data{Values: map[string]interface{}{
 					packageCountFlag.Name(): 5,
 					pathArgs.Name():         []string{"."},
