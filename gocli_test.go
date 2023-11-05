@@ -10,7 +10,7 @@ import (
 )
 
 func successOutput(pkg string, coverage float64) string {
-	return fmt.Sprintf("ok \t %s \t coverage: \t %0.2f%% of statements", pkg, coverage)
+	return fmt.Sprintf("ok \t %s \t 0.123s \t coverage: \t %0.2f%% of statements", pkg, coverage)
 }
 
 func failLine(pkg string) string {
@@ -115,7 +115,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							12.34,
-							successOutput("p1", 12.34) + "\n",
+							successOutput("p1", 12.34),
 						},
 					},
 				}},
@@ -146,7 +146,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							noTestFiles,
 							0.0,
-							noTestLine("p1") + "\n",
+							noTestLine("p1"),
 						},
 					},
 				}},
@@ -179,7 +179,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testFailure,
 							0.0,
-							failLine("p1") + "\n",
+							failLine("p1"),
 						},
 					},
 				}},
@@ -212,7 +212,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							noTestFiles,
 							0.0,
-							noTestLine("p1") + "\n",
+							noTestLine("p1"),
 						},
 					},
 				}},
@@ -244,7 +244,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							noTestFiles,
 							0.0,
-							noTestLine("p1") + "\n",
+							noTestLine("p1"),
 						},
 					},
 				}},
@@ -276,7 +276,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							noTestFiles,
 							0.0,
-							noTestLine("p1") + "\n",
+							noTestLine("p1"),
 						},
 					},
 				}},
@@ -331,7 +331,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							54.33,
-							successOutput("p1", 54.33) + "\n",
+							successOutput("p1", 54.33),
 						},
 					},
 				}},
@@ -361,7 +361,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							54.32,
-							successOutput("p1", 54.32) + "\n",
+							successOutput("p1", 54.32),
 						},
 					},
 				}},
@@ -393,7 +393,7 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							54.31,
-							successOutput("p1", 54.31) + "\n",
+							successOutput("p1", 54.31),
 						},
 					},
 				}},
@@ -408,8 +408,8 @@ func TestExecute(t *testing.T) {
 						successOutput("p1", 12.34),
 					},
 				}},
-				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n\n  Result 2: ok \t p1 \t coverage: \t 12.34%% of statements"),
-				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n\n  Result 2: ok \t p1 \t coverage: \t 12.34% of statements\n\n",
+				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n  Result 2: ok \t p1 \t 0.123s \t coverage: \t 12.34%% of statements"),
+				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n  Result 2: ok \t p1 \t 0.123s \t coverage: \t 12.34% of statements\n",
 				WantRunContents: []*command.RunContents{{
 					Name: "go",
 					Args: []string{
@@ -434,8 +434,8 @@ func TestExecute(t *testing.T) {
 						successOutput("p1", 12.34),
 					},
 				}},
-				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n\n  Result 2: ?       p1        [no test files]"),
-				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n\n  Result 2: ?       p1        [no test files]\n\n",
+				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n  Result 2: ?       p1        [no test files]"),
+				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n  Result 2: ?       p1        [no test files]\n",
 				WantRunContents: []*command.RunContents{{
 					Name: "go",
 					Args: []string{
@@ -476,24 +476,108 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							12.34,
-							successOutput("p1", 12.34) + "\n",
+							successOutput("p1", 12.34),
 						},
 						"p2": {
 							noTestFiles,
 							0.0,
-							noTestLine("p2") + "\n",
+							noTestLine("p2"),
 						},
 						"p3": {
 							noTestFiles,
 							0.0,
-							noTestLine("p3") + "\n",
+							noTestLine("p3"),
 						},
 						"p4": {
 							testSuccess,
 							98.76,
-							successOutput("p4", 98.76) + "\n",
+							successOutput("p4", 98.76),
 						},
 					},
+				}},
+			},
+		},
+		{
+			name: "Handles multiple pacakges successes with package count flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{
+					"--package-count",
+					"4",
+				},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						successOutput("p1", 12.34),
+						noTestLine("p2"),
+						noTestLine("p3"),
+						successOutput("p4", 98.76),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantData: &command.Data{Values: map[string]interface{}{
+					packageCountFlag.Name(): 4,
+					pathArgs.Name():         []string{"."},
+					minCoverageFlag.Name():  0.0,
+					"COVERAGE": map[string]*packageResult{
+						"p1": {
+							testSuccess,
+							12.34,
+							successOutput("p1", 12.34),
+						},
+						"p2": {
+							noTestFiles,
+							0.0,
+							noTestLine("p2"),
+						},
+						"p3": {
+							noTestFiles,
+							0.0,
+							noTestLine("p3"),
+						},
+						"p4": {
+							testSuccess,
+							98.76,
+							successOutput("p4", 98.76),
+						},
+					},
+				}},
+			},
+		},
+		{
+			name: "Fails if incorrect package count flag",
+			etc: &command.ExecuteTestCase{
+				Args: []string{
+					"--package-count",
+					"5",
+				},
+				RunResponses: []*command.FakeRun{{
+					Stdout: []string{
+						successOutput("p1", 12.34),
+						noTestLine("p2"),
+						noTestLine("p3"),
+						successOutput("p4", 98.76),
+					},
+				}},
+				WantRunContents: []*command.RunContents{{
+					Name: "go",
+					Args: []string{
+						"test",
+						".",
+						"-coverprofile=(TMP_FILE)",
+					},
+				}},
+				WantStderr: "Expected 5 packages, got 4: [p1 p2 p3 p4]",
+				WantErr:    fmt.Errorf("Expected 5 packages, got 4: [p1 p2 p3 p4]"),
+				WantData: &command.Data{Values: map[string]interface{}{
+					packageCountFlag.Name(): 5,
+					pathArgs.Name():         []string{"."},
+					minCoverageFlag.Name():  0.0,
 				}},
 			},
 		},
@@ -527,32 +611,32 @@ func TestExecute(t *testing.T) {
 						"p1": {
 							testSuccess,
 							12.34,
-							successOutput("p1", 12.34) + "\n",
+							successOutput("p1", 12.34),
 						},
 						"p2": {
 							noTestFiles,
 							0.0,
-							noTestLine("p2") + "\n",
+							noTestLine("p2"),
 						},
 						"p3": {
 							testFailure,
 							0.0,
-							failLine("p3") + "\n",
+							failLine("p3"),
 						},
 						"p4": {
 							noTestFiles,
 							0.0,
-							noTestLine("p4") + "\n",
+							noTestLine("p4"),
 						},
 						"p5": {
 							testFailure,
 							0.0,
-							failLine("p5") + "\n",
+							failLine("p5"),
 						},
 						"p6": {
 							testSuccess,
 							98.76,
-							successOutput("p6", 98.76) + "\n",
+							successOutput("p6", 98.76),
 						},
 					},
 				}},
@@ -596,6 +680,7 @@ func TestAutocomplete(t *testing.T) {
 			ctc: &command.CompleteTestCase{
 				Want: []string{
 					".git/",
+					"cmd/",
 					"testdata/",
 					"testpkg/",
 					" ",

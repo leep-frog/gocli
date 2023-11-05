@@ -34,7 +34,7 @@ func (gc *goCLI) Setup() []string { return nil }
 func (gc *goCLI) Name() string    { return "gt" }
 
 var (
-	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s+coverage:\s+([0-9]+\.[0-9]+)% of statements` + "\n?$")
+	coverageRegex = regexp.MustCompile(`^ok\s+([^\s]+)\s+[0-9\.a-zA-Z]+\s+coverage:\s+([0-9]+\.[0-9]+)% of statements` + "\n?$")
 	noTestRegex   = regexp.MustCompile(`^\?\s+([^\s]+)\s+\[no test files\]` + "\n?$")
 	testFailRegex = regexp.MustCompile(`^FAIL\s+([^\s]+)\s+`)
 
@@ -42,10 +42,11 @@ var (
 	testFileRegex = regexp.MustCompile(`.*_test.go$`)
 
 	// Args and flags
-	pathArgs        = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
-	verboseFlag     = command.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
-	minCoverageFlag = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
-	timeoutFlag     = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
+	pathArgs         = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
+	verboseFlag      = command.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
+	minCoverageFlag  = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
+	packageCountFlag = command.Flag[int]("package-count", 'p', "Number of packages to expect output for")
+	timeoutFlag      = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
 
 	funcFilterFlag = command.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter(command.SerialNodes(pathArgs), command.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
 		suggestions := map[string]bool{}
@@ -138,7 +139,13 @@ func (eh *goTestEventHandler) streamFunc(output command.Output, data *command.Da
 		return nil
 	}
 
-	eh.err = eh.processLine(string(bLine))
+	for _, line := range strings.Split(string(bLine), "\n") {
+		eh.err = eh.processLine(line)
+		if eh.err != nil {
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -169,6 +176,7 @@ func (gc *goCLI) Node() command.Node {
 			verboseFlag,
 			timeoutFlag,
 			funcFilterFlag,
+			packageCountFlag,
 		),
 		pathArgs,
 		&command.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
@@ -193,6 +201,7 @@ func (gc *goCLI) Node() command.Node {
 				parens := fmt.Sprintf("(%s)", strings.Join(funcFilterFlag.Get(d), "|"))
 				args = append(args, "-run", parens)
 			} else {
+				// TODO: Use tmpFile to compute coverage data instead of parsing somewhat arbitrary text (which is viable change (already happened once on me))
 				tmp, err := tmpFile()
 				if err != nil {
 					return o.Annotatef(err, "failed to create temporary file")
@@ -219,19 +228,23 @@ func (gc *goCLI) Node() command.Node {
 
 			// Error to return
 			packages := maps.Keys(eh.packageResults)
-			fmt.Println("PACKAGES", packages)
 			slices.Sort(packages)
+
+			if packageCountFlag.Provided(d) {
+				if expectedPackageCount := packageCountFlag.Get(d); expectedPackageCount != len(packages) {
+					return o.Stderrf("Expected %d packages, got %d: %v", expectedPackageCount, len(packages), packages)
+				}
+			}
+
 			var retErr error
 			for _, p := range packages {
 				pr := eh.packageResults[p]
 				switch pr.TestResult {
 				case noTestFiles:
 				case testFailure:
-					fmt.Println("BAD NEWS BEARS1")
 					retErr = o.Stderrf("Tests failed for package: %s\n", p)
 				case testSuccess:
 					if pr.Coverage < mc {
-						fmt.Println("BAD NEWS BEARS2")
 						retErr = o.Stderrf("Coverage of package %q (%s) must be at least %s\n", p, percentFormat(pr.Coverage), percentFormat(mc))
 						continue
 					}
