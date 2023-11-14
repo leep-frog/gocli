@@ -3,6 +3,7 @@ package gocli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -685,12 +686,14 @@ func TestAutocomplete(t *testing.T) {
 		{
 			name: "completes directories",
 			ctc: &command.CompleteTestCase{
-				Want: []string{
-					".git/",
-					"cmd/",
-					"testdata/",
-					"testpkg/",
-					" ",
+				Want: &command.Autocompletion{
+					Suggestions: []string{
+						filepath.FromSlash(".git/"),
+						filepath.FromSlash("cmd/"),
+						filepath.FromSlash("testdata/"),
+						filepath.FromSlash("testpkg/"),
+						" ",
+					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -704,10 +707,12 @@ func TestAutocomplete(t *testing.T) {
 			name: "completes test function names in current directory",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd -f ",
-				Want: []string{
-					"Autocomplete",
-					"Execute",
-					"Metadata",
+				Want: &command.Autocompletion{
+					Suggestions: []string{
+						"Autocomplete",
+						"Execute",
+						"Metadata",
+					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -721,13 +726,15 @@ func TestAutocomplete(t *testing.T) {
 			name: "completes test function names in all sub directories",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd './...' -f ",
-				Want: []string{
-					"Autocomplete",
-					"Execute",
-					"Metadata",
-					"Other",
-					"That",
-					"This",
+				Want: &command.Autocompletion{
+					Suggestions: []string{
+						"Autocomplete",
+						"Execute",
+						"Metadata",
+						"Other",
+						"That",
+						"This",
+					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -741,8 +748,10 @@ func TestAutocomplete(t *testing.T) {
 			name: "completes partial test function names",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd -f A",
-				Want: []string{
-					"Autocomplete",
+				Want: &command.Autocompletion{
+					Suggestions: []string{
+						"Autocomplete",
+					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
@@ -756,8 +765,10 @@ func TestAutocomplete(t *testing.T) {
 			name: "completes distinct test function names",
 			ctc: &command.CompleteTestCase{
 				Args: "cmd ./... -f That T",
-				Want: []string{
-					"This",
+				Want: &command.Autocompletion{
+					Suggestions: []string{
+						"This",
+					},
 				},
 				WantData: &command.Data{
 					Values: map[string]interface{}{
