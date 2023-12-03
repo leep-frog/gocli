@@ -11,7 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/leep-frog/command"
+	"github.com/leep-frog/command/command"
+	"github.com/leep-frog/command/commander"
 	"github.com/leep-frog/command/sourcerer"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -42,13 +43,13 @@ var (
 	testFileRegex = regexp.MustCompile(`.*_test.go$`)
 
 	// Args and flags
-	pathArgs         = command.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &command.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, command.Default([]string{"."}))
-	verboseFlag      = command.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
-	minCoverageFlag  = command.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", command.Positive[float64](), command.LTE[float64](100), command.Default[float64](0))
-	packageCountFlag = command.Flag[int]("package-count", 'p', "Number of packages to expect output for")
-	timeoutFlag      = command.Flag[int]("timeout", 't', "Test timeout in seconds", command.Positive[int]())
+	pathArgs         = commander.ListArg[string]("PATH", "Path(s) to go packages to test", 0, command.UnboundedList, &commander.FileCompleter[[]string]{Distinct: true, IgnoreFiles: true}, commander.Default([]string{"."}))
+	verboseFlag      = commander.BoolFlag("verbose", 'v', "Whether or not to test with verbose output")
+	minCoverageFlag  = commander.Flag[float64]("minCoverage", 'm', "If set, enforces that minimum coverage is met", commander.Positive[float64](), commander.LTE[float64](100), commander.Default[float64](0))
+	packageCountFlag = commander.Flag[int]("package-count", 'p', "Number of packages to expect output for")
+	timeoutFlag      = commander.Flag[int]("timeout", 't', "Test timeout in seconds", commander.Positive[int]())
 
-	funcFilterFlag = command.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, command.DeferredCompleter(command.SerialNodes(pathArgs), command.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
+	funcFilterFlag = commander.ListFlag[string]("func-filter", 'f', "The test function filter", 0, command.UnboundedList, commander.DeferredCompleter(commander.SerialNodes(pathArgs), commander.CompleterFromFunc(func(sl []string, data *command.Data) (*command.Completion, error) {
 		suggestions := map[string]bool{}
 		for _, rootPath := range pathArgs.GetOrDefault(data, []string{"."}) {
 			rootOnly := true
@@ -170,8 +171,8 @@ func (eh *goTestEventHandler) processLine(line string) error {
 }
 
 func (gc *goCLI) Node() command.Node {
-	return command.SerialNodes(
-		command.FlagProcessor(
+	return commander.SerialNodes(
+		commander.FlagProcessor(
 			minCoverageFlag,
 			verboseFlag,
 			timeoutFlag,
@@ -179,7 +180,7 @@ func (gc *goCLI) Node() command.Node {
 			packageCountFlag,
 		),
 		pathArgs,
-		&command.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
+		&commander.ExecutorProcessor{F: func(o command.Output, d *command.Data) error {
 			// Error if verbose and coverage check
 			mc := minCoverageFlag.Get(d)
 
@@ -213,7 +214,7 @@ func (gc *goCLI) Node() command.Node {
 			eh := &goTestEventHandler{
 				packageResults: map[string]*packageResult{},
 			}
-			sc := &command.ShellCommand[[]string]{
+			sc := &commander.ShellCommand[[]string]{
 				CommandName:           "go",
 				Args:                  args,
 				OutputStreamProcessor: eh.streamFunc,

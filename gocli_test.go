@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/leep-frog/command"
+	"github.com/leep-frog/command/command"
+	"github.com/leep-frog/command/commandertest"
+	"github.com/leep-frog/command/commandtest"
 )
 
 func successOutput(pkg string, coverage float64) string {
@@ -25,14 +27,14 @@ func noTestLine(pkg string) string {
 func TestExecute(t *testing.T) {
 	for _, test := range []struct {
 		name       string
-		etc        *command.ExecuteTestCase
+		etc        *commandtest.ExecuteTestCase
 		tmpFileErr error
 	}{
 		{
 			name: "Works when no coverage returned",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{}},
-				WantRunContents: []*command.RunContents{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{}},
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -48,13 +50,13 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Fails if shell command error",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				WantErr:    fmt.Errorf("go test shell command error: failed to execute shell command: bad news bears"),
 				WantStderr: "go test shell command error: failed to execute shell command: bad news bears\n",
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Err: fmt.Errorf("bad news bears"),
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -70,14 +72,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Ignores test input no coverage returned",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						"hello there",
 						"general kenobi",
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -93,15 +95,15 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Gets coverage result",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						"hello there",
 						successOutput("p1", 12.34),
 						"general kenobi",
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -124,15 +126,15 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Gets no-test result",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						"hello there",
 						noTestLine("p1"),
 						"general kenobi",
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -155,15 +157,15 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Gets test failure result",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						"hello there",
 						failLine("p1"),
 						"general kenobi",
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -188,14 +190,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Adds timeout flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-t", "123"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						noTestLine("p1"),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -221,14 +223,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Adds verbose flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-v"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						noTestLine("p1"),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -253,14 +255,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Adds func-filter flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-f", "SomeTest", "OtherTest"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						noTestLine("p1"),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -285,7 +287,7 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Fails if func-filter flag and min coverage flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args:       []string{"-m", "12.34", "-f", "SomeTest", "OtherTest"},
 				WantStderr: "Cannot set func-filter and min coverage flags simultaneously\n",
 				WantErr:    fmt.Errorf("Cannot set func-filter and min coverage flags simultaneously"),
@@ -299,7 +301,7 @@ func TestExecute(t *testing.T) {
 		{
 			name:       "Fails if tmp file error",
 			tmpFileErr: fmt.Errorf("oops"),
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				WantStderr: "failed to create temporary file: oops\n",
 				WantErr:    fmt.Errorf("failed to create temporary file: oops"),
 				WantData: &command.Data{Values: map[string]interface{}{
@@ -310,14 +312,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Succeeds if coverage result is above threshold",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-m", "54.32"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 54.33),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -340,14 +342,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Succeeds if coverage result is at threshold",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-m", "54.32"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 54.32),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -370,14 +372,14 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Fails if coverage result is below threshold",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{"-m", "54.32"},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 54.31),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -402,8 +404,8 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Fails if multiple regexes for same package",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						noTestLine("p1"),
 						successOutput("p1", 12.34),
@@ -411,7 +413,7 @@ func TestExecute(t *testing.T) {
 				}},
 				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n  Result 2: ok \t p1 \t 0.123s \t coverage: \t 12.34%% of statements"),
 				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: ?       p1        [no test files]\n  Result 2: ok \t p1 \t 0.123s \t coverage: \t 12.34% of statements\n",
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -427,8 +429,8 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Handles multiple errors",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						failLine("p1"),
 						noTestLine("p1"),
@@ -437,7 +439,7 @@ func TestExecute(t *testing.T) {
 				}},
 				WantErr:    fmt.Errorf("event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n  Result 2: ?       p1        [no test files]"),
 				WantStderr: "event handling error: Multiple results for package \"p1\":\n  Result 1: FAIL \t p1 \t abc \t 123 def\n  Result 2: ?       p1        [no test files]\n",
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -453,8 +455,8 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Handles multiple pacakges successes",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 12.34),
 						noTestLine("p2"),
@@ -462,7 +464,7 @@ func TestExecute(t *testing.T) {
 						successOutput("p4", 98.76),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -500,12 +502,12 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Handles multiple pacakges successes with package count flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{
 					"--package-count",
 					"4",
 				},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 12.34),
 						noTestLine("p2"),
@@ -513,7 +515,7 @@ func TestExecute(t *testing.T) {
 						successOutput("p4", 98.76),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -552,12 +554,12 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Fails if incorrect package count flag",
-			etc: &command.ExecuteTestCase{
+			etc: &commandtest.ExecuteTestCase{
 				Args: []string{
 					"--package-count",
 					"5",
 				},
-				RunResponses: []*command.FakeRun{{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 12.34),
 						noTestLine("p2"),
@@ -565,7 +567,7 @@ func TestExecute(t *testing.T) {
 						successOutput("p4", 98.76),
 					},
 				}},
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -591,8 +593,8 @@ func TestExecute(t *testing.T) {
 		},
 		{
 			name: "Handles multiple pacakges with errors",
-			etc: &command.ExecuteTestCase{
-				RunResponses: []*command.FakeRun{{
+			etc: &commandtest.ExecuteTestCase{
+				RunResponses: []*commandtest.FakeRun{{
 					Stdout: []string{
 						successOutput("p1", 12.34),
 						noTestLine("p2"),
@@ -604,7 +606,7 @@ func TestExecute(t *testing.T) {
 				}},
 				WantStderr: "Tests failed for package: p3\nTests failed for package: p5\n",
 				WantErr:    fmt.Errorf("Tests failed for package: p5"),
-				WantRunContents: []*command.RunContents{{
+				WantRunContents: []*commandtest.RunContents{{
 					Name: "go",
 					Args: []string{
 						"test",
@@ -657,7 +659,7 @@ func TestExecute(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create temporary file")
 			}
-			command.StubValue(t, &tmpFile, func() (*os.File, error) {
+			commandtest.StubValue(t, &tmpFile, func() (*os.File, error) {
 				return tmp, test.tmpFileErr
 			})
 
@@ -673,7 +675,7 @@ func TestExecute(t *testing.T) {
 			if test.etc.RunResponses != nil && len(test.etc.RunResponses[0].Stdout) > 0 {
 				test.etc.WantStdout = fmt.Sprintf("%s%s", test.etc.WantStdout, strings.Join(test.etc.RunResponses[0].Stdout, "\n")) + "\n"
 			}
-			command.ExecuteTest(t, test.etc)
+			commandertest.ExecuteTest(t, test.etc)
 		})
 	}
 }
@@ -681,11 +683,11 @@ func TestExecute(t *testing.T) {
 func TestAutocomplete(t *testing.T) {
 	for _, test := range []struct {
 		name string
-		ctc  *command.CompleteTestCase
+		ctc  *commandtest.CompleteTestCase
 	}{
 		{
 			name: "completes directories",
-			ctc: &command.CompleteTestCase{
+			ctc: &commandtest.CompleteTestCase{
 				Want: &command.Autocompletion{
 					Suggestions: []string{
 						filepath.FromSlash(".git/"),
@@ -705,7 +707,7 @@ func TestAutocomplete(t *testing.T) {
 		},
 		{
 			name: "completes test function names in current directory",
-			ctc: &command.CompleteTestCase{
+			ctc: &commandtest.CompleteTestCase{
 				Args: "cmd -f ",
 				Want: &command.Autocompletion{
 					Suggestions: []string{
@@ -724,7 +726,7 @@ func TestAutocomplete(t *testing.T) {
 		},
 		{
 			name: "completes test function names in all sub directories",
-			ctc: &command.CompleteTestCase{
+			ctc: &commandtest.CompleteTestCase{
 				Args: "cmd './...' -f ",
 				Want: &command.Autocompletion{
 					Suggestions: []string{
@@ -746,7 +748,7 @@ func TestAutocomplete(t *testing.T) {
 		},
 		{
 			name: "completes partial test function names",
-			ctc: &command.CompleteTestCase{
+			ctc: &commandtest.CompleteTestCase{
 				Args: "cmd -f A",
 				Want: &command.Autocompletion{
 					Suggestions: []string{
@@ -763,7 +765,7 @@ func TestAutocomplete(t *testing.T) {
 		},
 		{
 			name: "completes distinct test function names",
-			ctc: &command.CompleteTestCase{
+			ctc: &commandtest.CompleteTestCase{
 				Args: "cmd ./... -f That T",
 				Want: &command.Autocompletion{
 					Suggestions: []string{
@@ -782,7 +784,7 @@ func TestAutocomplete(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			test.ctc.Node = (&goCLI{}).Node()
-			command.CompleteTest(t, test.ctc)
+			commandertest.AutocompleteTest(t, test.ctc)
 		})
 	}
 }
