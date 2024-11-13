@@ -8,5 +8,5 @@ import (
 )
 
 func main() {
-	os.Exit(sourcerer.Source([]sourcerer.CLI{gocli.CLI()}))
+	os.Exit(sourcerer.Source("gocli", []sourcerer.CLI{gocli.CLI()}))
 }
